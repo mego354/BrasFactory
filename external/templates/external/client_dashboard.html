@@ -1,0 +1,92 @@
+{% load static factory_tags %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة العميل | {{ client.name }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <style>
+    body { background:var(--color-bg); }
+    .ext-header { background: linear-gradient(135deg, #1e1033, #2d1a56); color:white; padding:1.25rem 1.5rem; display:flex; align-items:center; justify-content:space-between; }
+  </style>
+</head>
+<body>
+  <div class="ext-header">
+    <div>
+      <div style="font-size:0.75rem;opacity:0.7;">نظام إدارة المصنع</div>
+      <div style="font-weight:800;font-size:1.1rem;">مرحباً، {{ client.name }}</div>
+    </div>
+    <a href="{% url 'external:logout' %}" class="btn btn-sm" style="background:rgba(255,255,255,0.12);color:white;">خروج</a>
+  </div>
+
+  <div class="page-container">
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:1rem;margin-bottom:1.5rem;">
+      <div class="stat-card"><div class="stat-card-value">{{ models|length }}</div><div class="stat-card-label">موديلات</div></div>
+      <div class="stat-card"><div class="stat-card-value">{{ total_qty|ar_number }}</div><div class="stat-card-label">قطع منتجة</div></div>
+      <div class="stat-card"><div class="stat-card-value" style="font-size:1.2rem;">{{ total_value|currency_egp }}</div><div class="stat-card-label">قيمة الإنتاج</div></div>
+    </div>
+
+    <!-- Date Filter -->
+    <div class="filter-bar" style="margin-bottom:1.5rem;">
+      <form method="get" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;width:100%;">
+        <div><label class="form-label" style="margin-bottom:0.2rem;">من</label><input type="date" name="start_date" class="form-control" value="{{ start_date }}"></div>
+        <div><label class="form-label" style="margin-bottom:0.2rem;">إلى</label><input type="date" name="end_date" class="form-control" value="{{ end_date }}"></div>
+        <button type="submit" class="btn btn-primary">تصفية</button>
+      </form>
+    </div>
+
+    <!-- Models -->
+    {% for model in models %}
+    <div class="card" style="margin-bottom:1rem;">
+      <div class="card-header">
+        <div>
+          <div style="font-weight:700;">{{ model.code }} — {{ model.name }}</div>
+          <div style="font-size:0.78rem;color:var(--color-text-muted);">{{ model.variants.count }} نوع منتج</div>
+        </div>
+        {{ model.is_active|status_badge }}
+      </div>
+      {% for ms in model.model_stages.all %}
+      {% with produced=ms.stage.entries.filter %}
+      <div style="margin-bottom:0.4rem;">
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.15rem;">
+          <span>{{ ms.stage.name }}</span>
+        </div>
+      </div>
+      {% endwith %}
+      {% endfor %}
+    </div>
+    {% empty %}
+    <div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-title">لا توجد موديلات</div></div>
+    {% endfor %}
+
+    <!-- Recent Production -->
+    {% if recent %}
+    <div class="card" style="margin-top:1.5rem;">
+      <div class="card-header"><h3 class="card-title">آخر سجلات الإنتاج</h3></div>
+      <div class="table-container">
+        <table class="table">
+          <thead><tr><th>التاريخ</th><th>النوع</th><th>المرحلة</th><th>الكمية</th></tr></thead>
+          <tbody>
+            {% for entry in recent %}
+            <tr>
+              <td style="font-size:0.78rem;">{{ entry.production_date }}</td>
+              <td style="font-size:0.82rem;">{{ entry.variant.color }} / {{ entry.variant.size }}</td>
+              <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
+              <td style="font-weight:700;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <script src="{% static 'js/main.js' %}"></script>
+</body>
+</html>

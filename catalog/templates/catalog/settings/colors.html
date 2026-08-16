@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}الألوان{% endblock %}
+{% block page_title %}إدارة الألوان{% endblock %}
+{% block content %}
+<div class="grid-2col-responsive">
+  <div class="card sticky-desktop">
+    <div class="card-header"><h2 class="card-title">➕ إضافة لون جديد</h2></div>
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+      <div class="form-group">
+        <label class="form-label">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}<div class="invalid-feedback">{{ field.errors.0 }}</div>{% endif %}
+      </div>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">إضافة اللون</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">🎨 الألوان الحالية ({{ colors|length }})</h2>
+      <form method="get" style="display:flex;gap:0.5rem;width:100%;max-width:240px;">
+        <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="بحث عن لون...">
+        <button type="submit" class="btn btn-secondary">🔍</button>
+      </form>
+    </div>
+    <div class="table-container">
+      <table class="table">
+        <thead><tr><th>الاسم</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+        <tbody>
+          {% for color in colors %}
+          <tr>
+            <td><strong>{{ color.name }}</strong></td>
+            <td>{{ color.is_active|status_badge }}</td>
+            <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+              <a href="{% url 'catalog:color_edit' color.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
+              <form method="post" action="{% url 'catalog:color_toggle' color.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-sm {% if color.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                  {% if color.is_active %}تعطيل{% else %}تفعيل{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" style="text-align:center;color:var(--color-text-muted);padding:1.5rem;">لا توجد ألوان مسجلة</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

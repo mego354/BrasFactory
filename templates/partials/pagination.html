@@ -1,0 +1,20 @@
+{% if page_obj.has_other_pages %}
+<div style="display:flex;align-items:center;justify-content:center;gap:0.4rem;margin-top:1.25rem;flex-wrap:wrap;">
+  {% if page_obj.has_previous %}
+  <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-secondary">← السابق</a>
+  {% endif %}
+
+  {% for num in page_obj.paginator.page_range %}
+    {% if page_obj.number == num %}
+    <span class="btn btn-sm btn-primary">{{ num }}</span>
+    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+    <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ num }}" class="btn btn-sm btn-secondary">{{ num }}</a>
+    {% endif %}
+  {% endfor %}
+
+  {% if page_obj.has_next %}
+  <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ page_obj.next_page_number }}" class="btn btn-sm btn-secondary">التالي →</a>
+  {% endif %}
+  <span style="font-size:0.8rem;color:var(--color-text-muted);">صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}</span>
+</div>
+{% endif %}

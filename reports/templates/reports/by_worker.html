@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}تقرير العمال{% endblock %}
+{% block page_title %}تقرير الإنتاج حسب العامل{% endblock %}
+{% block content %}
+<div class="filter-bar">
+  <form method="get">
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.2rem;">المرحلة</label>
+      <select name="stage" class="form-control" data-auto-submit>
+        <option value="">كل المراحل</option>
+        {% for s in stages %}<option value="{{ s.pk }}" {% if filters.stage_id == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.2rem;">من تاريخ</label>
+      <input type="date" name="start_date" class="form-control" value="{{ filters.start_date }}">
+    </div>
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.2rem;">إلى تاريخ</label>
+      <input type="date" name="end_date" class="form-control" value="{{ filters.end_date }}">
+    </div>
+    <button type="submit" class="btn btn-primary">تصفية</button>
+    <a href="?{{ request.GET.urlencode }}&export=csv" class="btn btn-secondary">⬇ CSV</a>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    <table class="table">
+      <thead><tr><th>العامل</th><th>الكمية المنتجة</th><th>إجمالي الأرباح</th><th>سجلات الإنتاج</th></tr></thead>
+      <tbody>
+        {% for row in data %}
+        <tr>
+          <td><a href="{% url 'workers:detail' row.worker__id %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">{{ row.worker__name }}</a></td>
+          <td style="font-weight:800;color:var(--color-primary);">{{ row.total_qty|ar_number }}</td>
+          <td style="font-weight:800;color:var(--color-success);">{{ row.total_earnings|currency_egp }}</td>
+          <td style="color:var(--color-text-muted);">{{ row.entry_count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:2rem;">لا توجد بيانات مطابقة</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

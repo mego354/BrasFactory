@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:600px;margin:0 auto;">
+  <div class="card-header"><h2 class="card-title">{{ title }}</h2></div>
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-group">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {% if field.field.widget.input_type == 'checkbox' and field.name != 'is_active' %}
+        <!-- Multi-checkbox for stages -->
+        <div class="checkbox-grid">
+          {% for choice in field %}
+          <label class="checkbox-item {% if choice.data.selected %}selected{% endif %}" id="stage-lbl-{{ choice.data.value }}">
+            {{ choice.tag }} {{ choice.choice_label }}
+          </label>
+          {% endfor %}
+        </div>
+      {% elif field.name == 'is_active' %}
+        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+          {{ field }} <span>نشط</span>
+        </label>
+      {% else %}
+        {{ field }}
+      {% endif %}
+      {% if field.errors %}<div class="invalid-feedback">{{ field.errors.0 }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+      <a href="{% url 'workers:list' %}" class="btn btn-secondary">إلغاء</a>
+      <button type="submit" class="btn btn-primary">حفظ</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.querySelectorAll('.checkbox-grid input[type=checkbox]').forEach(cb => {
+  const lbl = cb.closest('.checkbox-item');
+  cb.addEventListener('change', () => lbl.classList.toggle('selected', cb.checked));
+  if (cb.checked) lbl.classList.add('selected');
+});
+</script>
+{% endblock %}

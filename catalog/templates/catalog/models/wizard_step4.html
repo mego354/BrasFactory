@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}إنشاء موديل — الخطوة 4{% endblock %}
+{% block page_title %}إنشاء موديل جديد{% endblock %}
+{% block content %}
+<div class="wizard-steps" style="margin-bottom:2rem;">
+  <div class="wizard-step done"><div class="wizard-step-num">✓</div><div class="wizard-step-label">المعلومات</div></div>
+  <div class="wizard-connector done"></div>
+  <div class="wizard-step done"><div class="wizard-step-num">✓</div><div class="wizard-step-label">الألوان</div></div>
+  <div class="wizard-connector done"></div>
+  <div class="wizard-step done"><div class="wizard-step-num">✓</div><div class="wizard-step-label">المقاسات</div></div>
+  <div class="wizard-connector done"></div>
+  <div class="wizard-step active"><div class="wizard-step-num">4</div><div class="wizard-step-label">المراحل والأسعار</div></div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step"><div class="wizard-step-num">5</div><div class="wizard-step-label">المراجعة</div></div>
+</div>
+<div class="card">
+  <div class="card-header"><h2 class="card-title">الخطوة 4: مراحل الإنتاج والأسعار</h2></div>
+  <form method="post">
+    {% csrf_token %}
+    <div class="table-container" style="margin-bottom:1.5rem;">
+      <table class="table">
+        <thead>
+          <tr><th>اختر</th><th>المرحلة</th><th>سعر الوحدة (ج.م)</th><th>الترتيب</th></tr>
+        </thead>
+        <tbody>
+          {% for stage in stages %}
+          <tr id="stage-row-{{ stage.pk }}">
+            <td>
+              <input type="checkbox" name="stage_{{ stage.pk }}_selected"
+                     class="custom-checkbox" style="width:20px;height:20px;"
+                     onchange="toggleStageRow({{ stage.pk }}, this.checked)">
+            </td>
+            <td><strong>{{ stage.name }}</strong>{% if stage.description %}<div style="font-size:0.75rem;color:var(--color-text-muted);">{{ stage.description }}</div>{% endif %}</td>
+            <td>
+              <input type="number" name="stage_{{ stage.pk }}_price" step="0.01" min="0"
+                     class="form-control" style="width:120px;" placeholder="0.00"
+                     id="price_{{ stage.pk }}" disabled>
+            </td>
+            <td>
+              <input type="number" name="stage_{{ stage.pk }}_order" value="{{ forloop.counter0 }}"
+                     class="form-control" style="width:70px;" id="order_{{ stage.pk }}" disabled>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+      <a href="{% url 'catalog:model_wizard_step3' %}" class="btn btn-secondary">← السابق</a>
+      <button type="submit" class="btn btn-primary">التالي — المراجعة ←</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleStageRow(stageId, checked) {
+  document.getElementById('price_' + stageId).disabled = !checked;
+  document.getElementById('order_' + stageId).disabled = !checked;
+}
+</script>
+{% endblock %}

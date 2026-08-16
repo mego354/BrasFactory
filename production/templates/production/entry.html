@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+
+{% block title %}تسجيل الإنتاج{% endblock %}
+{% block page_title %}تسجيل إنتاج جديد{% endblock %}
+
+{% block content %}
+<div class="grid-2col-responsive">
+
+  <!-- Entry Form (Sticky on desktop, normal flow on mobile) -->
+  <div class="card sticky-desktop">
+    <div class="card-header">
+      <h2 class="card-title">📝 بيانات الإنتاج اليومي</h2>
+      {% if initial_variant_id %}
+      <span class="badge badge-purple">⚡ تم التعبئة عبر رمز QR</span>
+      {% endif %}
+    </div>
+
+    <form method="post" id="productionForm"
+          data-initial-client="{{ initial_client_id }}"
+          data-initial-model="{{ initial_model_id }}"
+          data-initial-variant="{{ initial_variant_id }}">
+      {% csrf_token %}
+
+      <!-- Client (AJAX trigger - not submitted) -->
+      <div class="form-group">
+        <label class="form-label">العميل <span style="color:var(--color-danger);">*</span></label>
+        <select id="id_client" class="form-control" required>
+          <option value="">اختر العميل أولاً...</option>
+          {% for cl in clients %}
+          <option value="{{ cl.pk }}" {% if initial_client_id == cl.pk|stringformat:"s" %}selected{% endif %}>{{ cl.name }} ({{ cl.code }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Product Model (AJAX) -->
+      <div class="form-group">
+        <label class="form-label">الموديل <span style="color:var(--color-danger);">*</span></label>
+        <select id="id_product_model" class="form-control" disabled required>
+          <option value="">اختر الموديل...</option>
+        </select>
+      </div>
+
+      <!-- Variant (AJAX) -->
+      <div class="form-group">
+        <label class="form-label">نوع المنتج (لون / مقاس) <span style="color:var(--color-danger);">*</span></label>
+        <select name="variant" id="id_variant" class="form-control" disabled required>
+          <option value="">اختر نوع المنتج...</option>
+        </select>
+        {% if form.variant.errors %}
+        <div class="invalid-feedback" style="display:block;">{{ form.variant.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Stage (AJAX) -->
+      <div class="form-group">
+        <label class="form-label">مرحلة الإنتاج <span style="color:var(--color-danger);">*</span></label>
+        <select name="stage" id="id_stage" class="form-control" disabled required>
+          <option value="">اختر المرحلة...</option>
+        </select>
+        {% if form.stage.errors %}
+        <div class="invalid-feedback" style="display:block;">{{ form.stage.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Worker (AJAX, filtered by stage) -->
+      <div class="form-group">
+        <label class="form-label">العامل <span style="color:var(--color-danger);">*</span></label>
+        <select name="worker" id="id_worker" class="form-control" disabled required>
+          <option value="">اختر العامل...</option>
+        </select>
+        {% if form.worker.errors %}
+        <div class="invalid-feedback" style="display:block;">{{ form.worker.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Quantity -->
+      <div class="form-group">
+        <label class="form-label">الكمية المنتجة <span style="color:var(--color-danger);">*</span></label>
+        <input type="number" name="quantity" id="id_quantity" class="form-control"
+               min="1" placeholder="0" required inputmode="numeric"
+               value="{{ form.quantity.value|default:'' }}">
+        {% if form.quantity.errors %}
+        <div class="invalid-feedback" style="display:block;">{{ form.quantity.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Auto Price Display -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1.25rem;">
+        <div>
+          <div class="form-label">سعر الوحدة للمرحلة</div>
+          <div id="id_unit_price_display" style="padding:0.6rem 0.875rem;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-weight:700;color:var(--color-primary);font-size:1rem;">—</div>
+          <input type="hidden" id="id_unit_price_hidden">
+        </div>
+        <div>
+          <div class="form-label">إجمالي المستحق</div>
+          <div id="id_total_display" style="padding:0.6rem 0.875rem;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-weight:800;color:var(--color-success);font-size:1rem;">—</div>
+        </div>
+      </div>
+
+      <!-- Production Date -->
+      <div class="form-group">
+        <label class="form-label">تاريخ الإنتاج <span style="color:var(--color-danger);">*</span></label>
+        <input type="date" name="production_date" id="id_production_date" class="form-control" required
+               value="{{ form.production_date.value|default:today_date }}">
+        {% if form.production_date.errors %}
+        <div class="invalid-feedback" style="display:block;">{{ form.production_date.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <!-- Notes -->
+      <div class="form-group">
+        <label class="form-label">ملاحظات (اختياري)</label>
+        <input type="text" name="notes" class="form-control" placeholder="أي تفاصيل أو ملاحظات إضافية"
+               value="{{ form.notes.value|default:'' }}">
+      </div>
+
+      <button type="submit" class="btn btn-success btn-lg" style="width:100%;justify-content:center;font-size:1rem;">
+        ✅ حفظ وتأكيد سجل الإنتاج
+      </button>
+    </form>
+  </div>
+
+  <!-- Recent Entries List -->
+  <div>
+    <div class="card-header" style="margin-bottom:1rem;">
+      <h2 class="card-title">📋 آخر سجلات الإنتاج المسجلة</h2>
+    </div>
+
+    {% if recent %}
+    <div class="table-container">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th>المنتج</th>
+            <th>المرحلة</th>
+            <th>العامل</th>
+            <th>الكمية</th>
+            <th>الإجمالي</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in recent %}
+          <tr>
+            <td style="font-size:0.8rem;color:var(--color-text-muted);">{{ entry.production_date }}</td>
+            <td>
+              <a href="{% url 'catalog:model_detail' entry.variant.product_model.pk %}"
+                 style="font-weight:700;color:var(--color-primary);text-decoration:none;display:inline-flex;align-items:center;gap:0.35rem;"
+                 title="عرض تفاصيل الموديل">
+                <span>{{ entry.variant.product_model.code }} — {{ entry.variant.product_model.name }}</span>
+                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+              </a>
+              <div style="font-size:0.75rem;color:var(--color-text-muted);margin-top:0.15rem;">
+                {{ entry.variant.color.name }} / {{ entry.variant.size.name }}
+                <span style="opacity:0.6;">({{ entry.variant.product_model.client.name }})</span>
+              </div>
+            </td>
+            <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
+            <td style="font-size:0.85rem;font-weight:600;">{{ entry.worker.name }}</td>
+            <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
+            <td style="font-weight:800;font-size:0.85rem;color:var(--color-success);">{{ entry.total_amount|currency_egp }}</td>
+            <td>
+              {% if request.user.is_staff %}
+              <button onclick="showCancelModal({{ entry.pk }}, '{{ entry.variant.product_model.code }}')"
+                      class="btn btn-sm btn-danger">إلغاء</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-title">لا توجد سجلات بعد</div>
+      <p style="font-size:0.85rem;">سجّل أول عملية إنتاج من النموذج</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Cancel Modal -->
+<div id="cancelModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:100;align-items:center;justify-content:center;padding:1rem;">
+  <div class="card" style="max-width:420px;width:100%;margin:auto;box-shadow:var(--shadow-lg);">
+    <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:1rem;color:var(--color-danger);">⚠️ إلغاء سجل الإنتاج</h3>
+    <form id="cancelForm" method="post">
+      {% csrf_token %}
+      <div class="form-group">
+        <label class="form-label">سبب الإلغاء <span style="color:var(--color-danger);">*</span></label>
+        <textarea name="reason" class="form-control" rows="3" placeholder="أدخل سبب الإلغاء بدقة..." required minlength="5"></textarea>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-danger" style="flex:1;">تأكيد الإلغاء</button>
+        <button type="button" onclick="closeCancelModal()" class="btn btn-secondary" style="flex:1;">تراجع</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showCancelModal(entryId, modelCode) {
+  document.getElementById('cancelForm').action = `/entry/${entryId}/cancel/`;
+  document.getElementById('cancelModal').style.display = 'flex';
+}
+function closeCancelModal() {
+  document.getElementById('cancelModal').style.display = 'none';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}تقرير الموديلات{% endblock %}
+{% block page_title %}تقرير الإنتاج حسب الموديل{% endblock %}
+
+{% block content %}
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <form method="get">
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.2rem;">العميل</label>
+      <select name="client" class="form-control" data-auto-submit>
+        <option value="">كل العملاء</option>
+        {% for cl in clients %}<option value="{{ cl.pk }}" {% if filters.client_id == cl.pk|stringformat:"s" %}selected{% endif %}>{{ cl.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.2rem;">من تاريخ</label>
+      <input type="date" name="start_date" class="form-control" value="{{ filters.start_date }}">
+    </div>
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.2rem;">إلى تاريخ</label>
+      <input type="date" name="end_date" class="form-control" value="{{ filters.end_date }}">
+    </div>
+    <button type="submit" class="btn btn-primary">تصفية</button>
+    <a href="?{{ request.GET.urlencode }}&export=csv" class="btn btn-secondary">⬇ CSV</a>
+  </form>
+</div>
+
+<!-- Stats Grid -->
+<div class="grid-stats-responsive">
+  <div class="stat-card"><div class="stat-card-value">{{ summary.total_qty|ar_number }}</div><div class="stat-card-label">إجمالي الكمية المنتجة</div></div>
+  <div class="stat-card"><div class="stat-card-value" style="font-size:1.35rem;">{{ summary.total_value|currency_egp }}</div><div class="stat-card-label">إجمالي القيمة</div></div>
+  <div class="stat-card"><div class="stat-card-value">{{ summary.entry_count|ar_number }}</div><div class="stat-card-label">سجلات الإنتاج</div></div>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>الكود</th>
+          <th>اسم الموديل</th>
+          <th>العميل</th>
+          <th>الكمية</th>
+          <th>القيمة</th>
+          <th>أكواد QR</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in data %}
+        <tr>
+          <td>
+            <a href="{% url 'catalog:model_detail' row.variant__product_model__id %}" style="text-decoration:none;">
+              <code>{{ row.variant__product_model__code }}</code>
+            </a>
+          </td>
+          <td>
+            <a href="{% url 'catalog:model_detail' row.variant__product_model__id %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">
+              {{ row.variant__product_model__name }}
+            </a>
+          </td>
+          <td>{{ row.variant__product_model__client__name }}</td>
+          <td style="font-weight:800;color:var(--color-primary);">{{ row.total_qty|ar_number }}</td>
+          <td style="font-weight:800;color:var(--color-success);">{{ row.total_value|currency_egp }}</td>
+          <td>
+            <a href="{% url 'catalog:model_qr_sheet' row.variant__product_model__id %}" target="_blank" class="btn btn-sm btn-secondary" title="عرض وطباعة بطاقات QR">
+              📱 طباعة QR
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:2rem;">لا توجد بيانات مطابقة</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

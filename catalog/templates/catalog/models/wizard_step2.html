@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}إنشاء موديل — الخطوة 2{% endblock %}
+{% block page_title %}إنشاء موديل جديد{% endblock %}
+{% block content %}
+<div class="wizard-steps" style="margin-bottom:2rem;">
+  <div class="wizard-step done"><div class="wizard-step-num">✓</div><div class="wizard-step-label">المعلومات الأساسية</div></div>
+  <div class="wizard-connector done"></div>
+  <div class="wizard-step active"><div class="wizard-step-num">2</div><div class="wizard-step-label">الألوان</div></div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step"><div class="wizard-step-num">3</div><div class="wizard-step-label">المقاسات</div></div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step"><div class="wizard-step-num">4</div><div class="wizard-step-label">المراحل والأسعار</div></div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step"><div class="wizard-step-num">5</div><div class="wizard-step-label">المراجعة</div></div>
+</div>
+
+<div class="card" style="max-width:600px;margin:0 auto;">
+  <div class="card-header">
+    <h2 class="card-title">الخطوة 2: اختيار الألوان</h2>
+    <span class="badge badge-purple">{{ wizard.code }} — {{ wizard.name }}</span>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    {% if form.colors.errors %}<div class="alert alert-error">{{ form.colors.errors.0 }}</div>{% endif %}
+    <div class="checkbox-grid" style="margin-bottom:1.5rem;">
+      {% for color in colors %}
+      <label class="checkbox-item" id="color-label-{{ color.pk }}">
+        <input type="checkbox" name="colors" value="{{ color.pk }}" class="custom-checkbox"
+               onchange="toggleChip(this, 'color-label-{{ color.pk }}')">
+        {{ color.name }}
+      </label>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+      <a href="{% url 'catalog:model_wizard_step1' %}" class="btn btn-secondary">← السابق</a>
+      <button type="submit" class="btn btn-primary">التالي ←</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleChip(checkbox, labelId) {
+  document.getElementById(labelId).classList.toggle('selected', checkbox.checked);
+}
+</script>
+{% endblock %}

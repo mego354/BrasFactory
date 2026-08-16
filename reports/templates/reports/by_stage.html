@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}تقرير المراحل{% endblock %}
+{% block page_title %}تقرير الإنتاج حسب المرحلة{% endblock %}
+{% block content %}
+<div class="filter-bar">
+  <form method="get">
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.2rem;">من تاريخ</label>
+      <input type="date" name="start_date" class="form-control" value="{{ filters.start_date }}">
+    </div>
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.2rem;">إلى تاريخ</label>
+      <input type="date" name="end_date" class="form-control" value="{{ filters.end_date }}">
+    </div>
+    <button type="submit" class="btn btn-primary">تصفية</button>
+    <a href="?{{ request.GET.urlencode }}&export=csv" class="btn btn-secondary">⬇ CSV</a>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-container">
+    <table class="table">
+      <thead><tr><th>المرحلة</th><th>الكمية</th><th>التكلفة</th><th>عدد العمال</th></tr></thead>
+      <tbody>
+        {% for row in data %}
+        <tr>
+          <td><strong>{{ row.stage__name }}</strong></td>
+          <td style="font-weight:800;color:var(--color-primary);">{{ row.total_qty|ar_number }}</td>
+          <td style="font-weight:800;color:var(--color-success);">{{ row.total_cost|currency_egp }}</td>
+          <td>{{ row.worker_count }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:2rem;">لا توجد بيانات مطابقة</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

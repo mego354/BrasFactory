@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}العمال{% endblock %}
+{% block page_title %}إدارة العمال{% endblock %}
+{% block topbar_actions %}
+<a href="{% url 'workers:create' %}" class="btn btn-primary">+ عامل جديد</a>
+{% endblock %}
+{% block content %}
+<div class="filter-bar">
+  <form method="get">
+    <div class="filter-group" style="flex:2;">
+      <label class="form-label" style="margin-bottom:0.25rem;">بحث</label>
+      <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="الاسم أو الهاتف...">
+    </div>
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.25rem;">المرحلة</label>
+      <select name="stage" class="form-control" data-auto-submit>
+        <option value="">كل المراحل</option>
+        {% for stage in stages %}<option value="{{ stage.pk }}" {% if stage_id == stage.pk|stringformat:"s" %}selected{% endif %}>{{ stage.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.25rem;">الحالة</label>
+      <select name="status" class="form-control" data-auto-submit>
+        <option value="">كل الحالات</option>
+        <option value="active" {% if status == 'active' %}selected{% endif %}>نشط</option>
+        <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>غير نشط</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">بحث</button>
+  </form>
+</div>
+
+{% if page_obj.object_list %}
+<div class="card">
+  <div class="table-container">
+    <table class="table">
+      <thead><tr><th>الاسم</th><th>الهاتف</th><th>المراحل</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+      <tbody>
+        {% for worker in page_obj %}
+        <tr>
+          <td><a href="{% url 'workers:detail' worker.pk %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">{{ worker.name }}</a></td>
+          <td style="font-size:0.85rem;">{{ worker.phone|default:'—' }}</td>
+          <td>{% for s in worker.stages.all %}<span class="chip" style="margin:2px;">{{ s.name }}</span>{% empty %}<span style="color:var(--color-text-muted);font-size:0.8rem;">غير مسند</span>{% endfor %}</td>
+          <td>{{ worker.is_active|status_badge }}</td>
+          <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+            <a href="{% url 'workers:detail' worker.pk %}" class="btn btn-sm btn-secondary">عرض</a>
+            <a href="{% url 'workers:edit' worker.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
+            <form method="post" action="{% url 'workers:toggle' worker.pk %}">
+              {% csrf_token %}
+              <button class="btn btn-sm {% if worker.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                {% if worker.is_active %}تعطيل{% else %}تفعيل{% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "partials/pagination.html" %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-state-icon">👷</div>
+  <div class="empty-state-title">لا يوجد عمال</div>
+  <a href="{% url 'workers:create' %}" class="btn btn-primary" style="margin-top:1rem;">إضافة عامل</a>
+</div>
+{% endif %}
+{% endblock %}

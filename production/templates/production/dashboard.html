@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+
+{% block title %}لوحة التحكم{% endblock %}
+{% block page_title %}لوحة متابعة الإنتاج{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'production:entry' %}" class="btn btn-primary">
+  <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+  تسجيل إنتاج
+</a>
+{% endblock %}
+
+{% block content %}
+<!-- Summary Stats Grid -->
+<div class="grid-stats-responsive">
+  <!-- Total Produced -->
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#ede9fe;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#6e40c9"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+    </div>
+    <div class="stat-card-value">{{ total_produced|ar_number }}</div>
+    <div class="stat-card-label">قطع منتجة</div>
+  </div>
+
+  <!-- Total Value -->
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#fef3c7;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#d97706"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    </div>
+    <div class="stat-card-value" style="font-size:1.35rem;">{{ total_value|currency_egp }}</div>
+    <div class="stat-card-label">إجمالي المستحقات</div>
+  </div>
+
+  <!-- Planned Total -->
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#dbeafe;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#1d4ed8"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    </div>
+    <div class="stat-card-value">{{ total_planned|ar_number }}</div>
+    <div class="stat-card-label">مخطط الإنتاج</div>
+  </div>
+
+  <!-- Active Models -->
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#fce7f3;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#db2777"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+    </div>
+    <div class="stat-card-value">{{ active_models|ar_number }}</div>
+    <div class="stat-card-label">موديلات نشطة</div>
+  </div>
+
+  <!-- Active Workers -->
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#dcfce7;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#16a34a"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+    </div>
+    <div class="stat-card-value">{{ active_workers|ar_number }}</div>
+    <div class="stat-card-label">عمال مسجلين</div>
+  </div>
+
+  <!-- Active Clients -->
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#fef9c3;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#ca8a04"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+    </div>
+    <div class="stat-card-value">{{ active_clients|ar_number }}</div>
+    <div class="stat-card-label">عملاء نشطين</div>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <form method="get">
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.25rem;">العميل</label>
+      <select name="client" class="form-control" data-auto-submit>
+        <option value="">كل العملاء</option>
+        {% for cl in clients %}
+        <option value="{{ cl.pk }}" {% if client_id == cl.pk|stringformat:"s" %}selected{% endif %}>{{ cl.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.25rem;">من تاريخ</label>
+      <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+    </div>
+
+    <div class="filter-group">
+      <label class="form-label" style="margin-bottom:0.25rem;">إلى تاريخ</label>
+      <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+    </div>
+
+    <button type="submit" class="btn btn-primary">تصفية</button>
+    {% if client_id or start_date or end_date %}
+    <a href="{% url 'production:dashboard' %}" class="btn btn-secondary">إلغاء</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- 2-Column Responsive Layout -->
+<div class="grid-2col-responsive">
+  <!-- Right Column: Model Progress -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">📦 تقدم إنتاج الموديلات النشطة</h2>
+        <a href="{% url 'catalog:model_list' %}" class="btn btn-sm btn-secondary">عرض الكل</a>
+      </div>
+
+      {% if model_progress %}
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        {% for item in model_progress %}
+        <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);padding:1rem;background:var(--color-surface-2);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.4rem;">
+            <div>
+              <a href="{% url 'catalog:model_detail' item.model.pk %}" style="font-weight:800;color:var(--color-primary);text-decoration:none;font-size:0.95rem;">
+                {{ item.model.code }} — {{ item.model.name }}
+              </a>
+              <span style="font-size:0.75rem;color:var(--color-text-muted);margin-right:0.4rem;">({{ item.model.client.name }})</span>
+            </div>
+            <div style="font-size:0.8rem;font-weight:700;">
+              المخطط: <span style="color:var(--color-primary);">{{ item.planned|ar_number }}</span>
+            </div>
+          </div>
+
+          <!-- Stage Progress Bars -->
+          <div style="display:flex;flex-direction:column;gap:0.4rem;">
+            {% for s in item.stages %}
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:0.78rem;margin-bottom:0.15rem;">
+                <span style="font-weight:600;">{{ s.name }}</span>
+                <span style="color:var(--color-text-muted);">{{ s.produced|ar_number }} ({{ s.pct }}%)</span>
+              </div>
+              <div class="progress-wrap">
+                <div class="progress-bar" style="width:{{ s.pct }}%;"></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon">📦</div>
+        <div class="empty-state-title">لا توجد موديلات نشطة</div>
+        <a href="{% url 'catalog:model_wizard_step1' %}" class="btn btn-primary" style="margin-top:0.75rem;">إنشاء موديل جديد</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Left Column: Top Workers & Recent Entries -->
+  <div>
+    <!-- Top Workers Today -->
+    <div class="card" style="margin-bottom:1.25rem;">
+      <div class="card-header">
+        <h2 class="card-title">🏆 عمال اليوم الأكثر إنتاجاً</h2>
+        <span style="font-size:0.75rem;color:var(--color-text-muted);">اليوم: {% now "j F" %}</span>
+      </div>
+
+      {% if top_workers %}
+      <div style="display:flex;flex-direction:column;gap:0.5rem;">
+        {% for w in top_workers %}
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.75rem;background:var(--color-surface-2);border-radius:var(--radius-sm);">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <div style="width:26px;height:26px;background:var(--color-primary);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:800;">
+              {{ forloop.counter }}
+            </div>
+            <strong style="font-size:0.88rem;">{{ w.worker__name }}</strong>
+          </div>
+          <div style="text-align:left;">
+            <span style="font-weight:800;color:var(--color-primary);font-size:0.9rem;">{{ w.qty|ar_number }} قطعة</span>
+            <div style="font-size:0.72rem;color:var(--color-success);">{{ w.earnings|currency_egp }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color:var(--color-text-muted);font-size:0.85rem;text-align:center;padding:0.75rem;">لا توجد عمليات مسجلة اليوم حتى الآن.</p>
+      {% endif %}
+    </div>
+
+    <!-- Recent Production Entries -->
+    <div class="card">
+      <div class="card-header">
+        <h2 class="card-title">📋 آخر سجلات الإنتاج</h2>
+        <a href="{% url 'production:entry' %}" class="btn btn-sm btn-secondary">تسجيل جديد</a>
+      </div>
+
+      {% if recent %}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>الموديل</th>
+              <th>المرحلة</th>
+              <th>الكمية</th>
+              <th>العامل</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in recent %}
+            <tr>
+              <td>
+                <a href="{% url 'catalog:model_detail' entry.variant.product_model.pk %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">
+                  {{ entry.variant.product_model.code }}
+                </a>
+                <div style="font-size:0.72rem;color:var(--color-text-muted);">{{ entry.variant.color.name }}/{{ entry.variant.size.name }}</div>
+              </td>
+              <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
+              <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
+              <td style="font-size:0.82rem;">{{ entry.worker.name }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p style="color:var(--color-text-muted);font-size:0.85rem;text-align:center;padding:0.75rem;">لا توجد سجلات إنتاج مسجلة بعد.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

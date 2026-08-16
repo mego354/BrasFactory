@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}المقاسات{% endblock %}
+{% block page_title %}إدارة المقاسات{% endblock %}
+{% block content %}
+<div class="grid-2col-responsive">
+  <div class="card sticky-desktop">
+    <div class="card-header"><h2 class="card-title">➕ إضافة مقاس جديد</h2></div>
+    <form method="post">
+      {% csrf_token %}
+      {% for field in form %}
+      <div class="form-group">
+        <label class="form-label">{{ field.label }}</label>
+        {{ field }}
+        {% if field.errors %}<div class="invalid-feedback">{{ field.errors.0 }}</div>{% endif %}
+      </div>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">إضافة المقاس</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2 class="card-title">📏 المقاسات الحالية ({{ sizes|length }})</h2></div>
+    <div class="table-container">
+      <table class="table">
+        <thead><tr><th>المقاس</th><th>الترتيب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+        <tbody>
+          {% for size in sizes %}
+          <tr>
+            <td><strong>{{ size.name }}</strong></td>
+            <td>{{ size.sort_order }}</td>
+            <td>{{ size.is_active|status_badge }}</td>
+            <td>
+              <form method="post" action="{% url 'catalog:size_toggle' size.pk %}">
+                {% csrf_token %}
+                <button class="btn btn-sm {% if size.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                  {% if size.is_active %}تعطيل{% else %}تفعيل{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:1.5rem;">لا توجد مقاسات مسجلة</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

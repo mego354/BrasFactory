@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}مراجعة الموديل الجديد{% endblock %}
+{% block page_title %}مراجعة وتأكيد الموديل{% endblock %}
+{% block content %}
+<div class="card" style="max-width:700px;margin:0 auto;">
+  <div class="card-header">
+    <h2 class="card-title">✅ مراجعة البيانات قبل الإنشاء</h2>
+    <span class="badge badge-purple">الخطوة 5 من 5</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem;">
+    <div class="card" style="background:var(--color-surface-2);">
+      <div style="font-size:0.75rem;color:var(--color-text-muted);">العميل</div>
+      <div style="font-weight:700;">{{ client.name }}</div>
+    </div>
+    <div class="card" style="background:var(--color-surface-2);">
+      <div style="font-size:0.75rem;color:var(--color-text-muted);">كود الموديل</div>
+      <div style="font-weight:700;font-family:monospace;">{{ wiz.code }}</div>
+    </div>
+    <div class="card" style="background:var(--color-surface-2);grid-column:1/-1;">
+      <div style="font-size:0.75rem;color:var(--color-text-muted);">اسم الموديل</div>
+      <div style="font-weight:700;">{{ wiz.name }}</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem;">
+    <div>
+      <div class="form-label">الألوان المختارة ({{ colors|length }})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
+        {% for color in colors %}<span class="chip">{{ color.name }}</span>{% endfor %}
+      </div>
+    </div>
+    <div>
+      <div class="form-label">المقاسات المختارة ({{ sizes|length }})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">
+        {% for size in sizes %}<span class="chip">{{ size.name }}</span>{% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-bottom:1.5rem;">
+    <div class="form-label">مراحل الإنتاج والأسعار</div>
+    <div class="table-container">
+      <table class="table">
+        <thead><tr><th>المرحلة</th><th>سعر الوحدة</th></tr></thead>
+        <tbody>
+          {% for s in wiz.stages %}
+          <tr>
+            <td><strong>{{ s.stage_name }}</strong></td>
+            <td style="color:var(--color-success);font-weight:700;">{{ s.unit_price }} ج.م</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="alert alert-info" style="margin-bottom:1.5rem;">
+    <strong>📊 سيتم توليد {{ variant_count }} نوع منتج</strong>
+    ({{ colors|length }} لون × {{ sizes|length }} مقاس)
+  </div>
+
+  <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+    <a href="{% url 'catalog:model_wizard_step4' %}" class="btn btn-secondary">← تعديل</a>
+    <form method="post" action="{% url 'catalog:model_wizard_generate' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-success btn-lg">
+        🚀 إنشاء الموديل وتوليد الأنواع
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

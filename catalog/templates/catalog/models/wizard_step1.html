@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}إنشاء موديل — الخطوة 1{% endblock %}
+{% block page_title %}إنشاء موديل جديد{% endblock %}
+{% block content %}
+<!-- Wizard Steps -->
+<div class="wizard-steps" style="margin-bottom:2rem;">
+  <div class="wizard-step active"><div class="wizard-step-num">1</div><div class="wizard-step-label">المعلومات الأساسية</div></div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step"><div class="wizard-step-num">2</div><div class="wizard-step-label">الألوان</div></div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step"><div class="wizard-step-num">3</div><div class="wizard-step-label">المقاسات</div></div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step"><div class="wizard-step-num">4</div><div class="wizard-step-label">المراحل والأسعار</div></div>
+  <div class="wizard-connector"></div>
+  <div class="wizard-step"><div class="wizard-step-num">5</div><div class="wizard-step-label">المراجعة</div></div>
+</div>
+
+<div class="card" style="max-width:600px;margin:0 auto;">
+  <div class="card-header"><h2 class="card-title">الخطوة 1: المعلومات الأساسية</h2></div>
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-group">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<div class="invalid-feedback">{{ field.errors.0 }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+      <a href="{% url 'catalog:model_list' %}" class="btn btn-secondary">إلغاء</a>
+      <button type="submit" class="btn btn-primary">التالي ←</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

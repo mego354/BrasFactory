@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}{{ model.code }} — تفاصيل الموديل{% endblock %}
+{% block page_title %}{{ model.code }} — {{ model.name }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'catalog:model_qr_sheet' model.pk %}" target="_blank" class="btn btn-primary">
+  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/></svg>
+  طباعة جميع أكواد QR
+</a>
+<form method="post" action="{% url 'catalog:model_toggle' model.pk %}" style="display:inline;">
+  {% csrf_token %}
+  <button type="submit" class="btn {% if model.is_active %}btn-warning{% else %}btn-success{% endif %}">
+    {% if model.is_active %}تعطيل{% else %}تفعيل{% endif %}
+  </button>
+</form>
+<a href="{% url 'catalog:model_list' %}" class="btn btn-secondary">← الموديلات</a>
+{% endblock %}
+
+{% block content %}
+<!-- Header Stats Grid -->
+<div class="card">
+  <div class="grid-stats-responsive" style="margin-bottom:0;">
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">العميل</div><div style="font-weight:800;font-size:1.05rem;">{{ model.client.name }}</div></div>
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">الكود</div><div style="font-weight:800;font-family:monospace;font-size:1.05rem;color:var(--color-primary);">{{ model.code }}</div></div>
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">إجمالي المخطط</div><div style="font-weight:800;font-size:1.05rem;">{{ total_planned|ar_number }} قطعة</div></div>
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">الحالة</div><div>{{ model.is_active|status_badge }}</div></div>
+    {% if model.description %}
+    <div style="grid-column:1/-1;border-top:1px solid var(--color-border);padding-top:0.5rem;margin-top:0.25rem;">
+      <div style="font-size:0.75rem;color:var(--color-text-muted);">الوصف</div>
+      <div style="font-size:0.9rem;">{{ model.description }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid-2col-responsive">
+  <div>
+    <!-- Stage Summary -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">⚙️ تقدم مراحل الإنتاج</h3></div>
+      {% if stage_summaries %}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr><th>المرحلة</th><th>السعر</th><th>المخطط</th><th>المنتج</th><th>المتبقي</th><th>التقدم</th></tr>
+          </thead>
+          <tbody>
+            {% for s in stage_summaries %}
+            <tr>
+              <td><strong>{{ s.stage.name }}</strong></td>
+              <td>{{ s.unit_price|currency_egp }}</td>
+              <td>{{ s.planned|ar_number }}</td>
+              <td style="color:var(--color-primary);font-weight:700;">{{ s.produced|ar_number }}</td>
+              <td style="color:var(--color-warning);font-weight:700;">{{ s.remaining|ar_number }}</td>
+              <td style="min-width:110px;">
+                <div class="progress-wrap"><div class="progress-bar" style="width:{{ s.pct }}%;"></div></div>
+                <span style="font-size:0.75rem;color:var(--color-text-muted);">{{ s.pct }}%</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p style="color:var(--color-text-muted);text-align:center;padding:1rem;">لم يتم تهيئة مراحل الإنتاج.</p>
+      {% endif %}
+    </div>
+
+    <!-- Recent Production History -->
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">📋 آخر سجلات الإنتاج</h3></div>
+      {% if recent_entries %}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr><th>التاريخ</th><th>النوع</th><th>المرحلة</th><th>العامل</th><th>الكمية</th><th>الإجمالي</th></tr>
+          </thead>
+          <tbody>
+            {% for entry in recent_entries %}
+            <tr>
+              <td style="font-size:0.78rem;color:var(--color-text-muted);">{{ entry.production_date }}</td>
+              <td style="font-size:0.82rem;">{{ entry.variant.color.name }} / {{ entry.variant.size.name }}</td>
+              <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
+              <td style="font-size:0.85rem;">{{ entry.worker.name }}</td>
+              <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
+              <td style="font-weight:700;font-size:0.82rem;color:var(--color-success);">{{ entry.total_amount|currency_egp }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p style="color:var(--color-text-muted);text-align:center;padding:1rem;">لا توجد سجلات إنتاج بعد.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Variants with QR Codes -->
+  <div class="card">
+    <div class="card-header">
+      <h3 class="card-title">📱 أنواع المنتج وأكواد QR</h3>
+      <span class="badge badge-purple">{{ variants_data|length }} نوع</span>
+    </div>
+    {% for item in variants_data %}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 0;border-bottom:1px solid var(--color-border);gap:0.75rem;flex-wrap:wrap;">
+      <!-- QR Thumbnail -->
+      <a href="{% url 'catalog:variant_qr_card' item.variant.pk %}" target="_blank" title="عرض وطباعة بطاقة QR">
+        <img src="{{ item.qr_b64 }}" alt="QR" style="width:48px;height:48px;border:1.5px solid var(--color-border);border-radius:var(--radius-md);padding:2px;background:white;">
+      </a>
+
+      <!-- Info -->
+      <div style="flex:1;min-width:140px;">
+        <div style="font-size:0.9rem;font-weight:800;color:var(--color-text);">{{ item.variant.color.name }} / {{ item.variant.size.name }}</div>
+        <code style="font-size:0.75rem;color:var(--color-text-muted);">{{ item.variant.sku }}</code>
+        <div style="margin-top:0.35rem;display:flex;gap:0.35rem;flex-wrap:wrap;">
+          <a href="{% url 'catalog:variant_qr_card' item.variant.pk %}" target="_blank" class="btn btn-sm btn-secondary" style="font-size:0.75rem;padding:0.2rem 0.5rem;">
+            🖨️ بطاقة QR
+          </a>
+          <a href="{{ item.entry_url }}" class="btn btn-sm btn-primary" style="font-size:0.75rem;padding:0.2rem 0.5rem;">
+            ⚡ تسجيل إنتاج
+          </a>
+        </div>
+      </div>
+
+      <!-- Planned Qty Form -->
+      <div style="text-align:left;">
+        <div style="font-size:0.75rem;color:var(--color-text-muted);margin-bottom:0.15rem;">مخطط:</div>
+        <form method="post" action="{% url 'catalog:variant_update' item.variant.pk %}" style="display:inline-flex;gap:0.25rem;">
+          {% csrf_token %}
+          <input type="number" name="planned_quantity" value="{{ item.variant.planned_quantity }}"
+                 min="0" style="width:65px;padding:0.3rem 0.4rem;font-size:0.85rem;" class="form-control">
+          <button type="submit" class="btn btn-sm btn-secondary">✓</button>
+        </form>
+      </div>
+    </div>
+    {% empty %}
+    <p style="color:var(--color-text-muted);text-align:center;padding:1rem;">لا توجد أنواع لهذا الموديل.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

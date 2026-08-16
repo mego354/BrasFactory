@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load factory_tags %}
+{% block title %}{{ client.name }} | ملف العميل{% endblock %}
+{% block page_title %}{{ client.name }}{% endblock %}
+{% block topbar_actions %}
+<a href="{% url 'catalog:client_edit' client.pk %}" class="btn btn-secondary">تعديل</a>
+<form method="post" action="{% url 'catalog:client_toggle' client.pk %}" style="display:inline;">
+  {% csrf_token %}
+  <button class="btn {% if client.is_active %}btn-warning{% else %}btn-success{% endif %}">
+    {% if client.is_active %}تعطيل{% else %}تفعيل{% endif %}
+  </button>
+</form>
+<a href="{% url 'catalog:client_list' %}" class="btn btn-secondary">← العملاء</a>
+{% endblock %}
+
+{% block content %}
+<!-- Client Info Card -->
+<div class="card">
+  <div class="grid-stats-responsive" style="margin-bottom:0;">
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">كود العميل</div><div style="font-weight:800;font-family:monospace;font-size:1.05rem;color:var(--color-primary);">{{ client.code }}</div></div>
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">الهاتف</div><div style="font-weight:700;font-size:1rem;">{{ client.phone|default:'—' }}</div></div>
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">الحالة</div><div>{{ client.is_active|status_badge }}</div></div>
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">إجمالي القطع المنتجة</div><div style="font-weight:800;font-size:1.05rem;color:var(--color-primary);">{{ total_qty|ar_number }}</div></div>
+    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">إجمالي القيمة</div><div style="font-weight:800;font-size:1.05rem;color:var(--color-success);">{{ total_value|currency_egp }}</div></div>
+    {% if client.notes %}
+    <div style="grid-column:1/-1;border-top:1px solid var(--color-border);padding-top:0.5rem;margin-top:0.25rem;">
+      <div style="font-size:0.75rem;color:var(--color-text-muted);">ملاحظات</div>
+      <div style="font-size:0.9rem;">{{ client.notes }}</div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Models List -->
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">📦 موديلات هذا العميل ({{ models|length }})</h3>
+    <a href="{% url 'catalog:model_wizard_step1' %}" class="btn btn-sm btn-primary">+ موديل جديد</a>
+  </div>
+  {% if models %}
+  <div class="table-container">
+    <table class="table">
+      <thead><tr><th>الكود</th><th>الاسم</th><th>الأنواع</th><th>المخطط</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+      <tbody>
+        {% for model in models %}
+        <tr>
+          <td><code>{{ model.code }}</code></td>
+          <td><a href="{% url 'catalog:model_detail' model.pk %}" style="color:var(--color-primary);font-weight:700;text-decoration:none;">{{ model.name }}</a></td>
+          <td><span class="badge badge-purple">{{ model.variants.count }} نوع</span></td>
+          <td style="font-weight:700;">{{ model.total_planned|ar_number }}</td>
+          <td>{{ model.is_active|status_badge }}</td>
+          <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+            <a href="{% url 'catalog:model_detail' model.pk %}" class="btn btn-sm btn-secondary">عرض</a>
+            <a href="{% url 'catalog:model_qr_sheet' model.pk %}" target="_blank" class="btn btn-sm btn-primary">📱 QR</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-title">لا توجد موديلات لهذا العميل بعد</div></div>
+  {% endif %}
+</div>
+{% endblock %}

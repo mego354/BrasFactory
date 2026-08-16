@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}تعديل اللون{% endblock %}
+{% block page_title %}تعديل اللون: {{ color.name }}{% endblock %}
+{% block content %}
+<div class="card" style="max-width:400px;margin:0 auto;">
+  <div class="card-header"><h2 class="card-title">تعديل اللون</h2></div>
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-group">
+      <label class="form-label">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<div class="invalid-feedback">{{ field.errors.0 }}</div>{% endif %}
+    </div>
+    {% endfor %}
+    <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+      <a href="{% url 'catalog:color_list' %}" class="btn btn-secondary">إلغاء</a>
+      <button type="submit" class="btn btn-primary">حفظ</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
