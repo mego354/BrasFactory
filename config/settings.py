@@ -18,6 +18,8 @@ PYTHONANYWHERE_HOSTS = [
     'brasfactorysystem.pythonanywhere.com',
     'www.BrasFactorySystem.pythonanywhere.com',
     'www.brasfactorysystem.pythonanywhere.com',
+    'megahd.pythonanywhere.com',
+    'www.megahd.pythonanywhere.com',
     'localhost',
     '127.0.0.1',
 ]
@@ -33,8 +35,11 @@ CSRF_TRUSTED_ORIGINS = [
     'https://brasfactorysystem.pythonanywhere.com',
     'https://www.BrasFactorySystem.pythonanywhere.com',
     'https://www.brasfactorysystem.pythonanywhere.com',
+    'https://megahd.pythonanywhere.com',
+    'https://www.megahd.pythonanywhere.com',
     'http://BrasFactorySystem.pythonanywhere.com',
     'http://brasfactorysystem.pythonanywhere.com',
+    'http://megahd.pythonanywhere.com',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
 ]
