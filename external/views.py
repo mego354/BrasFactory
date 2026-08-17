@@ -125,6 +125,9 @@ class OTPVerifyView(View):
         return redirect('external:worker_dashboard')
 
 
+from core.pdf import FactoryPDFReport
+
+
 class ExternalClientDashboardView(View):
     """Client-only read-only dashboard."""
     template_name = 'external/client_dashboard.html'
@@ -137,9 +140,12 @@ class ExternalClientDashboardView(View):
         # Always read client from session — never from URL
         client = Client.objects.get(pk=auth['entity_id'])
         from production.models import ProductionEntry
+        from core.utils import get_current_month_date_range
 
-        start_date = request.GET.get('start_date', '')
-        end_date = request.GET.get('end_date', '')
+        start_date, end_date = get_current_month_date_range(
+            request.GET.get('start_date'),
+            request.GET.get('end_date')
+        )
 
         models = client.product_models.filter(is_active=True).prefetch_related(
             'variants', 'model_stages__stage'
@@ -158,7 +164,61 @@ class ExternalClientDashboardView(View):
 
         recent = entries_qs.select_related(
             'variant__color', 'variant__size', 'stage'
-        ).order_by('-production_date')[:20]
+        ).order_by('-production_date')[:30]
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title=f'كشف إنتاج ومتابعة طلبيات العميل: {client.name}',
+                subtitle=f'الفترة من {start_date} إلى {end_date}'
+            )
+            pdf.add_header(filters_dict={
+                'العميل': client.name,
+                'كود العميل': client.code,
+                'رقم الهاتف': client.phone or '—',
+                'الفترة': f'{start_date} إلى {end_date}',
+            })
+            pdf.add_kpis([
+                ('إجمالي القطع المنتجة', f"{total_qty:,} قطعة"),
+                ('إجمالي القيمة المالية', f"{total_value:,.2f} ج.م"),
+                ('عدد الموديلات المسجلة', f"{models.count():,} موديل"),
+            ])
+
+            if models:
+                pdf.add_section_title('الموديلات المسجلة وخطة الإنتاج')
+                m_rows = []
+                for m in models:
+                    m_rows.append([
+                        m.code,
+                        m.name,
+                        f"{m.variants.count()} نوع",
+                        f"{m.total_planned:,} قطعة",
+                    ])
+                pdf.add_table(
+                    headers=['الكود', 'اسم الموديل', 'الأنواع', 'إجمالي المخطط'],
+                    rows=m_rows,
+                    col_widths=[95, 220, 105, 115],
+                    right_align_cols=[1]
+                )
+
+            if recent:
+                pdf.add_section_title('سجل عمليات الإنتاج المنفذة خلال الفترة')
+                e_rows = []
+                for e in recent:
+                    e_rows.append([
+                        str(e.production_date),
+                        e.variant.product_model.code,
+                        f"{e.variant.color.name} / {e.variant.size.name}",
+                        e.stage.name,
+                        f"{e.quantity:,}",
+                    ])
+                pdf.add_table(
+                    headers=['التاريخ', 'الموديل', 'النوع (اللون / المقاس)', 'المرحلة', 'الكمية'],
+                    rows=e_rows,
+                    col_widths=[85, 90, 175, 115, 70],
+                    right_align_cols=[2, 3]
+                )
+
+            return pdf.build_response(f'client_statement_{start_date}_{end_date}.pdf')
 
         return render(request, self.template_name, {
             'client': client,
@@ -182,12 +242,54 @@ class ExternalWorkerDashboardView(View):
 
         worker = Worker.objects.prefetch_related('stages').get(pk=auth['entity_id'])
         from workers.services import get_worker_earnings, get_worker_production_history
+        from core.utils import get_current_month_date_range
 
-        start_date = request.GET.get('start_date', '')
-        end_date = request.GET.get('end_date', '')
+        start_date, end_date = get_current_month_date_range(
+            request.GET.get('start_date'),
+            request.GET.get('end_date')
+        )
 
-        summary = get_worker_earnings(worker, start_date or None, end_date or None)
-        history = get_worker_production_history(worker, start_date or None, end_date or None)
+        summary = get_worker_earnings(worker, start_date, end_date)
+        history = get_worker_production_history(worker, start_date, end_date)
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title=f'كشف إنتاج ومستحقات العامل: {worker.name}',
+                subtitle=f'الفترة من {start_date} إلى {end_date}'
+            )
+            stage_names = "، ".join([s.name for s in worker.stages.all()]) or 'غير مسند'
+            pdf.add_header(filters_dict={
+                'العامل': worker.name,
+                'المراحل المسندة': stage_names,
+                'الفترة': f'{start_date} إلى {end_date}',
+            })
+            pdf.add_kpis([
+                ('إجمالي القطع المنتجة', f"{summary['total_qty']:,} قطعة"),
+                ('إجمالي الأرباح والمستحقات', f"{summary['total_amount']:,.2f} ج.م"),
+                ('عدد السجلات المسجلة', f"{summary['entry_count']:,} سجل"),
+            ])
+
+            if history:
+                pdf.add_section_title('تفاصيل سجل الإنتاج والأرباح')
+                h_rows = []
+                for e in history:
+                    h_rows.append([
+                        str(e.production_date),
+                        e.variant.product_model.code,
+                        f"{e.variant.color.name} / {e.variant.size.name}",
+                        e.stage.name,
+                        f"{e.quantity:,}",
+                        f"{e.total_amount:,.2f} ج.م",
+                    ])
+                pdf.add_table(
+                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'الكمية', 'الأرباح'],
+                    rows=h_rows,
+                    col_widths=[75, 80, 135, 115, 60, 70],
+                    right_align_cols=[2, 3]
+                )
+
+            return pdf.build_response(f'worker_statement_{start_date}_{end_date}.pdf')
+
         paginator = Paginator(history, 20)
         page = paginator.get_page(request.GET.get('page'))
 
@@ -198,6 +300,7 @@ class ExternalWorkerDashboardView(View):
             'start_date': start_date,
             'end_date': end_date,
         })
+
 
 
 class ExternalLogoutView(View):

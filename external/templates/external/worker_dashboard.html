@@ -20,7 +20,12 @@
       <div style="font-size:0.75rem;opacity:0.7;">نظام إدارة المصنع</div>
       <div style="font-weight:800;font-size:1.1rem;">مرحباً، {{ worker.name }}</div>
     </div>
-    <a href="{% url 'external:logout' %}" class="btn btn-sm" style="background:rgba(255,255,255,0.12);color:white;">خروج</a>
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-sm" style="background:var(--color-primary);color:white;">
+        📄 تحميل كشف الحساب (PDF)
+      </a>
+      <a href="{% url 'external:logout' %}" class="btn btn-sm" style="background:rgba(255,255,255,0.12);color:white;">خروج</a>
+    </div>
   </div>
 
   <div class="page-container">
@@ -31,10 +36,20 @@
 
     <!-- Date Filter -->
     <div class="filter-bar" style="margin-bottom:1.5rem;">
-      <form method="get" style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;width:100%;">
-        <div><label class="form-label" style="margin-bottom:0.2rem;">من</label><input type="date" name="start_date" class="form-control" value="{{ start_date }}"></div>
-        <div><label class="form-label" style="margin-bottom:0.2rem;">إلى</label><input type="date" name="end_date" class="form-control" value="{{ end_date }}"></div>
-        <button type="submit" class="btn btn-primary">تصفية</button>
+      <form method="get" class="date-filter-grid">
+        <div class="filter-group">
+          <label class="form-label" style="margin-bottom:0.25rem;font-size:0.82rem;">📅 من تاريخ</label>
+          <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+        </div>
+        <div class="filter-group">
+          <label class="form-label" style="margin-bottom:0.25rem;font-size:0.82rem;">📅 إلى تاريخ</label>
+          <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+        </div>
+        <div class="date-filter-actions">
+          <button type="submit" class="btn btn-primary" style="min-height:44px;">🔍 تصفية</button>
+          <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary" style="min-height:44px;">📄 PDF</a>
+          <a href="{% url 'external:worker_dashboard' %}" class="btn btn-secondary" style="min-height:44px;">🔄 الشهر الحالي</a>
+        </div>
       </form>
     </div>
 

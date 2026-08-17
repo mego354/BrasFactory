@@ -35,14 +35,16 @@
           <tr>
             <td><strong>{{ color.name }}</strong></td>
             <td>{{ color.is_active|status_badge }}</td>
-            <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
-              <a href="{% url 'catalog:color_edit' color.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
-              <form method="post" action="{% url 'catalog:color_toggle' color.pk %}">
-                {% csrf_token %}
-                <button class="btn btn-sm {% if color.is_active %}btn-warning{% else %}btn-success{% endif %}">
-                  {% if color.is_active %}تعطيل{% else %}تفعيل{% endif %}
-                </button>
-              </form>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'catalog:color_edit' color.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
+                <form method="post" action="{% url 'catalog:color_toggle' color.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm {% if color.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                    {% if color.is_active %}تعطيل{% else %}تفعيل{% endif %}
+                  </button>
+                </form>
+              </div>
             </td>
           </tr>
           {% empty %}

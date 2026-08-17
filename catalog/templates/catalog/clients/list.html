@@ -21,6 +21,7 @@
       </select>
     </div>
     <button type="submit" class="btn btn-primary">بحث</button>
+    <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">📄 تحميل PDF</a>
   </form>
 </div>
 
@@ -39,15 +40,17 @@
           <td style="font-size:0.85rem;">{{ client.phone|default:'—' }}</td>
           <td><span class="badge badge-info">{{ client.models_count }}</span></td>
           <td>{{ client.is_active|status_badge }}</td>
-          <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
-            <a href="{% url 'catalog:client_detail' client.pk %}" class="btn btn-sm btn-secondary">عرض</a>
-            <a href="{% url 'catalog:client_edit' client.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
-            <form method="post" action="{% url 'catalog:client_toggle' client.pk %}">
-              {% csrf_token %}
-              <button class="btn btn-sm {% if client.is_active %}btn-warning{% else %}btn-success{% endif %}">
-                {% if client.is_active %}تعطيل{% else %}تفعيل{% endif %}
-              </button>
-            </form>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'catalog:client_detail' client.pk %}" class="btn btn-sm btn-secondary">عرض</a>
+              <a href="{% url 'catalog:client_edit' client.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
+              <form method="post" action="{% url 'catalog:client_toggle' client.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm {% if client.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                  {% if client.is_active %}تعطيل{% else %}تفعيل{% endif %}
+                </button>
+              </form>
+            </div>
           </td>
         </tr>
         {% endfor %}

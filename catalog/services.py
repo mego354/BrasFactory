@@ -78,6 +78,16 @@ def get_model_stage_price(product_model: ProductModel, stage_id: int):
 # ============================================================
 # QR Code Services
 # ============================================================
+def build_model_entry_url(model: ProductModel, base_url: str = 'http://127.0.0.1:8000') -> str:
+    """
+    Build the target URL for registering production for this model (pre-fills client and model).
+    """
+    client_id = model.client_id
+    model_id = model.id
+    path = reverse('production:entry')
+    return f"{base_url.rstrip('/')}{path}?client={client_id}&model={model_id}"
+
+
 def build_variant_entry_url(variant: ProductVariant, base_url: str = 'http://127.0.0.1:8000') -> str:
     """
     Build the target URL for registering production for this specific variant.

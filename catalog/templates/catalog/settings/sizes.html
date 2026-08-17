@@ -31,12 +31,14 @@
             <td>{{ size.sort_order }}</td>
             <td>{{ size.is_active|status_badge }}</td>
             <td>
-              <form method="post" action="{% url 'catalog:size_toggle' size.pk %}">
-                {% csrf_token %}
-                <button class="btn btn-sm {% if size.is_active %}btn-warning{% else %}btn-success{% endif %}">
-                  {% if size.is_active %}تعطيل{% else %}تفعيل{% endif %}
-                </button>
-              </form>
+              <div class="table-actions">
+                <form method="post" action="{% url 'catalog:size_toggle' size.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm {% if size.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                    {% if size.is_active %}تعطيل{% else %}تفعيل{% endif %}
+                  </button>
+                </form>
+              </div>
             </td>
           </tr>
           {% empty %}

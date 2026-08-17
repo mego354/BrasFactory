@@ -3,6 +3,10 @@
 {% block title %}{{ client.name }} | ملف العميل{% endblock %}
 {% block page_title %}{{ client.name }}{% endblock %}
 {% block topbar_actions %}
+<a href="?export=pdf" class="btn btn-secondary">
+  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+  كشف حساب PDF
+</a>
 <a href="{% url 'catalog:client_edit' client.pk %}" class="btn btn-secondary">تعديل</a>
 <form method="post" action="{% url 'catalog:client_toggle' client.pk %}" style="display:inline;">
   {% csrf_token %}
@@ -49,9 +53,11 @@
           <td><span class="badge badge-purple">{{ model.variants.count }} نوع</span></td>
           <td style="font-weight:700;">{{ model.total_planned|ar_number }}</td>
           <td>{{ model.is_active|status_badge }}</td>
-          <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
-            <a href="{% url 'catalog:model_detail' model.pk %}" class="btn btn-sm btn-secondary">عرض</a>
-            <a href="{% url 'catalog:model_qr_sheet' model.pk %}" target="_blank" class="btn btn-sm btn-primary">📱 QR</a>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'catalog:model_detail' model.pk %}" class="btn btn-sm btn-secondary">عرض</a>
+              <a href="{% url 'catalog:model_qr_sheet' model.pk %}" target="_blank" class="btn btn-sm btn-primary">📱 QR</a>
+            </div>
           </td>
         </tr>
         {% endfor %}

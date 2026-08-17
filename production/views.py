@@ -12,6 +12,8 @@ from django.core.paginator import Paginator
 from django.utils import timezone
 
 from core.mixins import LoginRequiredMixin
+from core.utils import get_current_month_date_range
+from core.pdf import FactoryPDFReport
 from catalog.models import Client, ProductModel, ProductVariant, ProductionStage, ProductModelStage
 from workers.models import Worker
 from .models import ProductionEntry
@@ -27,8 +29,10 @@ class DashboardView(View):
     def get(self, request):
         # Filters
         client_id = request.GET.get('client', '')
-        start_date = request.GET.get('start_date', '')
-        end_date = request.GET.get('end_date', '')
+        start_date, end_date = get_current_month_date_range(
+            request.GET.get('start_date'),
+            request.GET.get('end_date')
+        )
 
         entries_qs = ProductionEntry.objects.filter(is_cancelled=False)
         if client_id:
@@ -37,6 +41,7 @@ class DashboardView(View):
             entries_qs = entries_qs.filter(production_date__gte=start_date)
         if end_date:
             entries_qs = entries_qs.filter(production_date__lte=end_date)
+
 
         # Summary cards
         total_produced = entries_qs.aggregate(qty=Sum('quantity'))['qty'] or 0
@@ -95,6 +100,75 @@ class DashboardView(View):
         ).order_by('-qty')[:5]
 
         clients = Client.objects.filter(is_active=True)
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title='تقرير متابعة وسجل الإنتاج العام',
+                subtitle=f'الفترة من {start_date} إلى {end_date}'
+            )
+            client_name = 'كل العملاء'
+            if client_id:
+                cl = clients.filter(pk=client_id).first()
+                if cl:
+                    client_name = cl.name
+
+            pdf.add_header(filters_dict={
+                'الفترة': f'{start_date} إلى {end_date}',
+                'العميل': client_name,
+            })
+            pdf.add_kpis([
+                ('إجمالي القطع المنتجة', f"{total_produced:,} قطعة"),
+                ('إجمالي القيمة المالية', f"{total_value:,.2f} ج.م"),
+                ('الموديلات النشطة', f"{active_models:,} موديل"),
+                ('العمال النشطون', f"{active_workers:,} عامل"),
+            ])
+
+            # Model Progress Section
+            if model_progress:
+                pdf.add_section_title('موقف إنتاج الموديلات والتقدم العام')
+                m_rows = []
+                for mp in model_progress:
+                    m_rows.append([
+                        mp['model'].code,
+                        mp['model'].name,
+                        mp['model'].client.name,
+                        f"{mp['planned']:,}",
+                        f"{mp['overall_pct']}%",
+                    ])
+                pdf.add_table(
+                    headers=['الكود', 'اسم الموديل', 'العميل', 'إجمالي المخطط', 'نسبة الإنجاز'],
+                    rows=m_rows,
+                    col_widths=[80, 165, 140, 80, 70],
+                    right_align_cols=[1, 2]
+                )
+
+            # Recent Production Entries
+            recent_entries_full = entries_qs.select_related(
+                'variant__product_model__client', 'variant__color', 'variant__size',
+                'stage', 'worker'
+            ).order_by('-production_date', '-created_at')[:35]
+
+            if recent_entries_full:
+                pdf.add_section_title('سجلات الإنتاج التفصيلية للفترة المحددة')
+                entry_rows = []
+                for e in recent_entries_full:
+                    entry_rows.append([
+                        str(e.production_date),
+                        e.variant.product_model.code,
+                        f"{e.variant.color.name} / {e.variant.size.name}",
+                        e.stage.name,
+                        e.worker.name,
+                        f"{e.quantity:,}",
+                        f"{e.total_amount:,.2f} ج.م",
+                    ])
+                pdf.add_table(
+                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'العامل', 'الكمية', 'الإجمالي'],
+                    rows=entry_rows,
+                    col_widths=[65, 65, 105, 100, 95, 45, 60],
+                    right_align_cols=[1, 2, 3, 4]
+                )
+
+            return pdf.build_response(f'production_report_{start_date}_{end_date}.pdf')
 
         return render(request, 'production/dashboard.html', {
             'total_produced': total_produced,

@@ -33,6 +33,7 @@
       </select>
     </div>
     <button type="submit" class="btn btn-primary">بحث</button>
+    <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">📄 تحميل PDF</a>
   </form>
 </div>
 
@@ -53,15 +54,17 @@
           <td style="font-size:0.85rem;">{{ model.client.name }}</td>
           <td><span class="badge badge-purple">{{ model.variants_count }} نوع</span></td>
           <td>{{ model.is_active|status_badge }}</td>
-          <td style="display:flex;gap:0.4rem;flex-wrap:wrap;">
-            <a href="{% url 'catalog:model_detail' model.pk %}" class="btn btn-sm btn-secondary">عرض</a>
-            <a href="{% url 'catalog:model_qr_sheet' model.pk %}" target="_blank" class="btn btn-sm btn-primary">📱 QR</a>
-            <form method="post" action="{% url 'catalog:model_toggle' model.pk %}" style="display:inline;">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm {% if model.is_active %}btn-warning{% else %}btn-success{% endif %}">
-                {% if model.is_active %}تعطيل{% else %}تفعيل{% endif %}
-              </button>
-            </form>
+          <td>
+            <div class="table-actions">
+              <a href="{% url 'catalog:model_detail' model.pk %}" class="btn btn-sm btn-secondary">عرض</a>
+              <a href="{% url 'catalog:model_qr_sheet' model.pk %}" target="_blank" class="btn btn-sm btn-primary">📱 QR</a>
+              <form method="post" action="{% url 'catalog:model_toggle' model.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm {% if model.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                  {% if model.is_active %}تعطيل{% else %}تفعيل{% endif %}
+                </button>
+              </form>
+            </div>
           </td>
         </tr>
         {% endfor %}

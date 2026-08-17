@@ -3,6 +3,10 @@
 {% block title %}{{ worker.name }} | ملف العامل{% endblock %}
 {% block page_title %}{{ worker.name }}{% endblock %}
 {% block topbar_actions %}
+<a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">
+  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+  كشف حساب PDF
+</a>
 <a href="{% url 'workers:edit' worker.pk %}" class="btn btn-secondary">تعديل</a>
 <form method="post" action="{% url 'workers:toggle' worker.pk %}" style="display:inline;">
   {% csrf_token %}
@@ -54,6 +58,7 @@
           </select>
         </div>
         <button type="submit" class="btn btn-primary">تصفية</button>
+        <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">📄 تحميل PDF</a>
       </form>
     </div>
 

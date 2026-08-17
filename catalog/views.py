@@ -19,8 +19,9 @@ from .forms import (
 )
 from .services import (
     generate_variants, get_model_stage_price,
-    build_variant_entry_url, generate_qr_png_bytes, generate_qr_base64
+    build_model_entry_url, build_variant_entry_url, generate_qr_png_bytes, generate_qr_base64
 )
+from core.pdf import FactoryPDFReport, generate_qr_image_flowable
 from django.http import HttpResponse
 
 
@@ -167,6 +168,40 @@ class ClientListView(View):
             clients = clients.filter(is_active=True)
         elif status == 'inactive':
             clients = clients.filter(is_active=False)
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title='دليل وسجل العملاء',
+                subtitle='قائمة العملاء المسجلين وبيانات الاتصال والموديلات'
+            )
+            status_text = 'الكل' if not status else ('النشطين فقط' if status == 'active' else 'غير النشطين')
+            pdf.add_header(filters_dict={
+                'بحث': q if q else 'الكل',
+                'الحالة': status_text,
+            })
+            total_clients = clients.count()
+            active_count = clients.filter(is_active=True).count()
+            pdf.add_kpis([
+                ('إجمالي العملاء', f"{total_clients:,} عميل"),
+                ('العملاء النشطون', f"{active_count:,} عميل"),
+            ])
+            table_rows = []
+            for cl in clients:
+                table_rows.append([
+                    cl.code,
+                    cl.name,
+                    cl.phone or '—',
+                    str(cl.models_count),
+                    'نشط' if cl.is_active else 'معطل',
+                ])
+            pdf.add_table(
+                headers=['كود العميل', 'اسم العميل', 'رقم الهاتف', 'الموديلات', 'الحالة'],
+                rows=table_rows,
+                col_widths=[90, 195, 110, 70, 70],
+                right_align_cols=[1]
+            )
+            return pdf.build_response('clients_list.pdf')
+
         paginator = Paginator(clients, 20)
         page = paginator.get_page(request.GET.get('page'))
         return render(request, 'catalog/clients/list.html', {
@@ -222,6 +257,61 @@ class ClientDetailView(View):
         )
         total_value = entries.aggregate(total=Sum('total_amount'))['total'] or 0
         total_qty = entries.aggregate(total=Sum('quantity'))['total'] or 0
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title=f'كشف حساب وبيانات العميل: {client.name}',
+                subtitle=f'كود العميل: {client.code}'
+            )
+            pdf.add_header(filters_dict={
+                'كود العميل': client.code,
+                'رقم الهاتف': client.phone or '—',
+                'الحالة': 'نشط' if client.is_active else 'معطل',
+            })
+            pdf.add_kpis([
+                ('إجمالي القطع المنتجة', f"{total_qty:,} قطعة"),
+                ('إجمالي قيمة الإنتاج', f"{total_value:,.2f} ج.م"),
+                ('عدد الموديلات', f"{models.count():,} موديل"),
+            ])
+
+            pdf.add_section_title('موديلات العميل والكميات المخططة')
+            model_rows = []
+            for m in models:
+                model_rows.append([
+                    m.code,
+                    m.name,
+                    f"{m.variants.count()} نوع",
+                    f"{m.total_planned:,} قطعة",
+                    'نشط' if m.is_active else 'معطل',
+                ])
+            pdf.add_table(
+                headers=['الكود', 'اسم الموديل', 'الأنواع', 'المخطط', 'الحالة'],
+                rows=model_rows,
+                col_widths=[80, 185, 90, 100, 80],
+                right_align_cols=[1]
+            )
+
+            # Recent production entries
+            recent = entries.select_related('variant__color', 'variant__size', 'stage').order_by('-created_at')[:25]
+            if recent:
+                pdf.add_section_title('آخر سجلات الإنتاج للعميل')
+                recent_rows = []
+                for e in recent:
+                    recent_rows.append([
+                        str(e.production_date),
+                        e.variant.product_model.code,
+                        f"{e.variant.color.name} / {e.variant.size.name}",
+                        e.stage.name,
+                        f"{e.quantity:,}",
+                    ])
+                pdf.add_table(
+                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'الكمية'],
+                    rows=recent_rows,
+                    col_widths=[85, 80, 150, 130, 90],
+                    right_align_cols=[2, 3]
+                )
+            return pdf.build_response(f'client_{client.code}_report.pdf')
+
         return render(request, 'catalog/clients/detail.html', {
             'client': client,
             'models': models,
@@ -262,9 +352,56 @@ class ModelListView(View):
             models = models.filter(is_active=True)
         elif status == 'inactive':
             models = models.filter(is_active=False)
+
+        clients = Client.objects.filter(is_active=True)
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title='دليل وسجل موديلات المنتجات',
+                subtitle='بيانات الموديلات والعملاء والأنواع المسجلة'
+            )
+            client_name = 'الكل'
+            if client_id:
+                c_obj = clients.filter(pk=client_id).first()
+                if c_obj:
+                    client_name = c_obj.name
+
+            status_text = 'الكل' if not status else ('النشطة فقط' if status == 'active' else 'غير النشطة')
+            pdf.add_header(filters_dict={
+                'بحث': q if q else 'الكل',
+                'العميل': client_name,
+                'الحالة': status_text,
+            })
+            total_models = models.count()
+            active_models = models.filter(is_active=True).count()
+            pdf.add_kpis([
+                ('إجمالي الموديلات', f"{total_models:,} موديل"),
+                ('الموديلات النشطة', f"{active_models:,} موديل"),
+            ])
+            table_rows = []
+            base_url = request.build_absolute_uri('/')
+            for m in models.order_by('-created_at'):
+                register_url = build_model_entry_url(m, base_url)
+                qr_flowable = generate_qr_image_flowable(register_url, size=30)
+                table_rows.append([
+                    m.code,
+                    m.name,
+                    m.client.name,
+                    f"{m.variants_count} نوع",
+                    f"{m.total_planned:,} قطعة",
+                    'نشط' if m.is_active else 'معطل',
+                    qr_flowable,
+                ])
+            pdf.add_table(
+                headers=['الكود', 'اسم الموديل', 'العميل', 'الأنواع', 'المخطط', 'الحالة', 'رمز QR'],
+                rows=table_rows,
+                col_widths=[70, 130, 115, 55, 60, 50, 55],
+                right_align_cols=[1, 2]
+            )
+            return pdf.build_response('models_list.pdf')
+
         paginator = Paginator(models.order_by('-created_at'), 20)
         page = paginator.get_page(request.GET.get('page'))
-        clients = Client.objects.filter(is_active=True)
         return render(request, 'catalog/models/list.html', {
             'page_obj': page, 'q': q, 'client_id': client_id,
             'status': status, 'clients': clients,
@@ -499,6 +636,87 @@ class ModelDetailView(View):
             variant__product_model=model,
             is_cancelled=False
         ).select_related('variant__color', 'variant__size', 'stage', 'worker', 'created_by').order_by('-created_at')[:20]
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title=f'بطاقة المواصفات ومتابعة إنتاج الموديل: {model.name}',
+                subtitle=f'كود الموديل: {model.code} — العميل: {model.client.name}'
+            )
+            model_entry_url = build_model_entry_url(model, base_url)
+            pdf.add_header(
+                filters_dict={
+                    'كود الموديل': model.code,
+                    'العميل': model.client.name,
+                    'الحالة': 'نشط' if model.is_active else 'معطل',
+                },
+                qr_data=model_entry_url
+            )
+            total_produced = sum(s['produced'] for s in stage_summaries)
+            pdf.add_kpis([
+                ('إجمالي الكمية المخططة', f"{total_planned:,} قطعة"),
+                ('عدد أنواع الموديل', f"{len(variants_data):,} نوع"),
+                ('عدد مراحل التشغيل', f"{len(stage_summaries):,} مرحلة"),
+            ])
+
+            # Stage Progress Table
+            pdf.add_section_title('تقدم مراحل الإنتاج والأسعار')
+            stage_rows = []
+            for s in stage_summaries:
+                stage_rows.append([
+                    s['stage'].name,
+                    f"{s['unit_price']:,.2f} ج.م",
+                    f"{s['planned']:,}",
+                    f"{s['produced']:,}",
+                    f"{s['remaining']:,}",
+                    f"{s['pct']}%",
+                ])
+            pdf.add_table(
+                headers=['المرحلة', 'سعر القطعة', 'المخطط', 'المنتج', 'المتبقي', 'نسبة الإنجاز'],
+                rows=stage_rows,
+                col_widths=[145, 80, 80, 80, 80, 70],
+                right_align_cols=[0]
+            )
+
+            # Variants Table with QR Codes
+            pdf.add_section_title('أنواع المنتج والكميات المخططة وأكواد QR')
+            variant_rows = []
+            for item in variants_data:
+                qr_img = generate_qr_image_flowable(item['entry_url'], size=36)
+                variant_rows.append([
+                    item['variant'].sku,
+                    item['variant'].color.name,
+                    item['variant'].size.name,
+                    f"{item['variant'].planned_quantity:,} قطعة",
+                    qr_img,
+                ])
+            pdf.add_table(
+                headers=['كود SKU', 'اللون', 'المقاس', 'الكمية المخططة', 'رمز QR'],
+                rows=variant_rows,
+                col_widths=[125, 110, 110, 110, 80],
+                right_align_cols=[1, 2]
+            )
+
+            # Recent Production Entries Table
+            if recent_entries:
+                pdf.add_section_title('آخر سجلات الإنتاج المسجلة لهذا الموديل')
+                entry_rows = []
+                for e in recent_entries:
+                    entry_rows.append([
+                        str(e.production_date),
+                        f"{e.variant.color.name} / {e.variant.size.name}",
+                        e.stage.name,
+                        e.worker.name,
+                        f"{e.quantity:,}",
+                        f"{e.total_amount:,.2f} ج.م",
+                    ])
+                pdf.add_table(
+                    headers=['التاريخ', 'النوع', 'المرحلة', 'العامل', 'الكمية', 'القيمة'],
+                    rows=entry_rows,
+                    col_widths=[75, 110, 110, 110, 60, 70],
+                    right_align_cols=[1, 2, 3]
+                )
+
+            return pdf.build_response(f'model_{model.code}_report.pdf')
 
         return render(request, 'catalog/models/detail.html', {
             'model': model,

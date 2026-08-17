@@ -1,19 +1,25 @@
-import csv
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.utils.decorators import method_decorator
 from django.views import View
-from django.http import HttpResponse
 
 from catalog.models import Client, ProductModel, ProductionStage
+from catalog.services import build_model_entry_url, build_variant_entry_url
 from workers.models import Worker
+from core.utils import get_current_month_date_range
+from core.pdf import FactoryPDFReport, generate_qr_image_flowable
+from django.urls import reverse
 from . import services
 
 
 def get_filters(request):
+    start_date, end_date = get_current_month_date_range(
+        request.GET.get('start_date'),
+        request.GET.get('end_date')
+    )
     return {
-        'start_date': request.GET.get('start_date', ''),
-        'end_date': request.GET.get('end_date', ''),
+        'start_date': start_date,
+        'end_date': end_date,
         'client_id': request.GET.get('client', '') or None,
         'model_id': request.GET.get('model', '') or None,
         'stage_id': request.GET.get('stage', '') or None,
@@ -40,19 +46,55 @@ class ReportByModelView(View):
         data = services.production_by_model(filters)
         summary = services.overall_summary(filters)
         clients = Client.objects.filter(is_active=True)
-        if request.GET.get('export') == 'csv':
-            return _csv_response(
-                data,
-                ['كود الموديل', 'اسم الموديل', 'العميل', 'الكمية', 'القيمة'],
-                lambda r: [
+
+        if request.GET.get('export') == 'pdf':
+            client_name = 'كل العملاء'
+            if filters['client_id']:
+                cl = clients.filter(pk=filters['client_id']).first()
+                if cl:
+                    client_name = cl.name
+
+            pdf = FactoryPDFReport(
+                title='تقرير الإنتاج المجمع حسب الموديل وأكواد QR للتسجيل',
+                subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
+            )
+            base_url = request.build_absolute_uri('/')
+            entry_base_url = request.build_absolute_uri(reverse('production:entry'))
+
+            pdf.add_header(filters_dict={
+                'الفترة': f"{filters['start_date']} إلى {filters['end_date']}",
+                'العميل': client_name,
+            })
+            pdf.add_kpis([
+                ('إجمالي الكمية المنتجة', f"{summary['total_qty']:,} قطعة"),
+                ('إجمالي القيمة الإجمالية', f"{summary['total_value']:,.2f} ج.م"),
+                ('عدد سجلات الإنتاج', f"{summary['entry_count']:,} سجل"),
+            ])
+
+            table_rows = []
+            for r in data:
+                m_id = r.get('variant__product_model__id')
+                c_id = r.get('variant__product_model__client_id')
+                register_url = f"{entry_base_url}?client={c_id}&model={m_id}" if (c_id and m_id) else entry_base_url
+                qr_flowable = generate_qr_image_flowable(register_url, size=32)
+
+                table_rows.append([
                     r['variant__product_model__code'],
                     r['variant__product_model__name'],
                     r['variant__product_model__client__name'],
-                    r['total_qty'],
-                    r['total_value'],
-                ],
-                'report_by_model'
+                    f"{r['total_qty']:,}",
+                    f"{r['total_value']:,.2f} ج.م",
+                    qr_flowable,
+                ])
+
+            pdf.add_table(
+                headers=['كود الموديل', 'اسم الموديل', 'العميل', 'الكمية', 'القيمة', 'رمز QR للتسجيل'],
+                rows=table_rows,
+                col_widths=[75, 140, 120, 65, 75, 60],
+                right_align_cols=[1, 2]
             )
+            return pdf.build_response('report_by_model.pdf')
+
         return render(request, 'reports/by_model.html', {
             'data': data, 'summary': summary, 'filters': filters, 'clients': clients
         })
@@ -65,13 +107,45 @@ class ReportByWorkerView(View):
         data = services.production_by_worker(filters)
         summary = services.overall_summary(filters)
         stages = ProductionStage.objects.filter(is_active=True)
-        if request.GET.get('export') == 'csv':
-            return _csv_response(
-                data,
-                ['العامل', 'الكمية', 'الأرباح', 'عدد السجلات'],
-                lambda r: [r['worker__name'], r['total_qty'], r['total_earnings'], r['entry_count']],
-                'report_by_worker'
+
+        if request.GET.get('export') == 'pdf':
+            stage_name = 'كل المراحل'
+            if filters['stage_id']:
+                st = stages.filter(pk=filters['stage_id']).first()
+                if st:
+                    stage_name = st.name
+
+            pdf = FactoryPDFReport(
+                title='تقرير إنتاج ومستحقات العمال',
+                subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
             )
+            pdf.add_header(filters_dict={
+                'الفترة': f"{filters['start_date']} إلى {filters['end_date']}",
+                'المرحلة': stage_name,
+            })
+            pdf.add_kpis([
+                ('إجمالي القطع المنتجة', f"{summary['total_qty']:,} قطعة"),
+                ('إجمالي المستحقات والأرباح', f"{summary['total_value']:,.2f} ج.م"),
+                ('عدد العمال المنتجين', f"{len(data):,} عامل"),
+            ])
+
+            table_rows = []
+            for r in data:
+                table_rows.append([
+                    r['worker__name'],
+                    f"{r['total_qty']:,}",
+                    f"{r['total_earnings']:,.2f} ج.م",
+                    str(r['entry_count']),
+                ])
+
+            pdf.add_table(
+                headers=['اسم العامل', 'الكمية المنتجة', 'إجمالي المستحقات', 'عدد السجلات'],
+                rows=table_rows,
+                col_widths=[205, 110, 120, 100],
+                right_align_cols=[0]
+            )
+            return pdf.build_response('report_by_worker.pdf')
+
         return render(request, 'reports/by_worker.html', {
             'data': data, 'summary': summary, 'filters': filters, 'stages': stages
         })
@@ -83,17 +157,39 @@ class ReportByClientView(View):
         filters = get_filters(request)
         data = services.production_by_client(filters)
         summary = services.overall_summary(filters)
-        if request.GET.get('export') == 'csv':
-            return _csv_response(
-                data,
-                ['كود العميل', 'اسم العميل', 'الكمية', 'القيمة', 'عدد الموديلات'],
-                lambda r: [
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title='تقرير إنتاج ومبيعات العملاء',
+                subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
+            )
+            pdf.add_header(filters_dict={
+                'الفترة': f"{filters['start_date']} إلى {filters['end_date']}",
+            })
+            pdf.add_kpis([
+                ('إجمالي القطع المنتجة', f"{summary['total_qty']:,} قطعة"),
+                ('إجمالي القيمة المحققة', f"{summary['total_value']:,.2f} ج.م"),
+                ('عدد العملاء النشطين', f"{len(data):,} عميل"),
+            ])
+
+            table_rows = []
+            for r in data:
+                table_rows.append([
                     r['variant__product_model__client__code'],
                     r['variant__product_model__client__name'],
-                    r['total_qty'], r['total_value'], r['model_count']
-                ],
-                'report_by_client'
+                    f"{r['total_qty']:,}",
+                    f"{r['total_value']:,.2f} ج.م",
+                    str(r['model_count']),
+                ])
+
+            pdf.add_table(
+                headers=['كود العميل', 'اسم العميل', 'الكمية المنتجة', 'إجمالي القيمة', 'الموديلات'],
+                rows=table_rows,
+                col_widths=[85, 180, 95, 105, 70],
+                right_align_cols=[1]
             )
+            return pdf.build_response('report_by_client.pdf')
+
         return render(request, 'reports/by_client.html', {
             'data': data, 'summary': summary, 'filters': filters
         })
@@ -105,23 +201,38 @@ class ReportByStageView(View):
         filters = get_filters(request)
         data = services.production_by_stage(filters)
         summary = services.overall_summary(filters)
-        if request.GET.get('export') == 'csv':
-            return _csv_response(
-                data,
-                ['المرحلة', 'الكمية', 'التكلفة', 'عدد العمال'],
-                lambda r: [r['stage__name'], r['total_qty'], r['total_cost'], r['worker_count']],
-                'report_by_stage'
+
+        if request.GET.get('export') == 'pdf':
+            pdf = FactoryPDFReport(
+                title='تقرير تكلفة وإنتاج مراحل التشغيل',
+                subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
             )
+            pdf.add_header(filters_dict={
+                'الفترة': f"{filters['start_date']} إلى {filters['end_date']}",
+            })
+            pdf.add_kpis([
+                ('إجمالي القطع المنجزة', f"{summary['total_qty']:,} قطعة"),
+                ('إجمالي تكلفة التشغيل', f"{summary['total_value']:,.2f} ج.م"),
+                ('عدد المراحل النشطة', f"{len(data):,} مرحلة"),
+            ])
+
+            table_rows = []
+            for r in data:
+                table_rows.append([
+                    r['stage__name'],
+                    f"{r['total_qty']:,}",
+                    f"{r['total_cost']:,.2f} ج.م",
+                    str(r['worker_count']),
+                ])
+
+            pdf.add_table(
+                headers=['اسم مرحلة الإنتاج', 'الكمية المنجزة', 'إجمالي التكلفة', 'عدد العمال'],
+                rows=table_rows,
+                col_widths=[195, 115, 125, 100],
+                right_align_cols=[0]
+            )
+            return pdf.build_response('report_by_stage.pdf')
+
         return render(request, 'reports/by_stage.html', {
             'data': data, 'summary': summary, 'filters': filters
         })
-
-
-def _csv_response(data, headers, row_fn, filename):
-    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
-    response['Content-Disposition'] = f'attachment; filename="{filename}.csv"'
-    writer = csv.writer(response)
-    writer.writerow(headers)
-    for row in data:
-        writer.writerow(row_fn(row))
-    return response

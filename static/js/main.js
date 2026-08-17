@@ -84,31 +84,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 4000);
   });
 
-  // Mobile sidebar toggle & keyboard accessibility
+  // Mobile sidebar toggle & keyboard/touch accessibility
   const sidebarToggle = document.getElementById('sidebarToggle');
+  const mobileSideHandle = document.getElementById('mobileSideHandle');
+  const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
   const sidebar = document.getElementById('sidebar');
   const overlay = document.getElementById('sidebarOverlay');
 
   function closeSidebar() {
     sidebar?.classList.remove('open');
     overlay?.classList.remove('visible');
+    document.body.classList.remove('sidebar-is-open');
+    document.body.style.overflow = '';
   }
 
   function openSidebar() {
     sidebar?.classList.add('open');
     overlay?.classList.add('visible');
+    document.body.classList.add('sidebar-is-open');
+    if (window.innerWidth <= 1024) {
+      document.body.style.overflow = 'hidden'; // Prevent background scrolling when drawer is open
+    }
   }
 
-  if (sidebarToggle && sidebar) {
-    sidebarToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
-    });
+  function toggleSidebar(e) {
+    if (e) e.stopPropagation();
+    sidebar?.classList.contains('open') ? closeSidebar() : openSidebar();
+  }
+
+  if (sidebar) {
+    sidebarToggle?.addEventListener('click', toggleSidebar);
+    mobileSideHandle?.addEventListener('click', toggleSidebar);
+    sidebarCloseBtn?.addEventListener('click', closeSidebar);
     overlay?.addEventListener('click', closeSidebar);
+
+    // Auto-close sidebar on mobile when navigating
+    document.querySelectorAll('.sidebar-item').forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 1024) {
+          closeSidebar();
+        }
+      });
+    });
+
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') closeSidebar();
     });
   }
+
 });
 
 // ============================================================

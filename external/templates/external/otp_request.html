@@ -10,8 +10,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="{% static 'css/main.css' %}">
   <style>
-    body { background: linear-gradient(135deg, #1e1033 0%, #2d1a56 50%, #1e1033 100%); min-height:100vh; display:flex; align-items:center; justify-content:center; }
-    .otp-card { background:white; border-radius:20px; padding:2.5rem; width:100%; max-width:420px; box-shadow:0 25px 60px rgba(0,0,0,0.3); }
+    body { background: linear-gradient(135deg, #1e1033 0%, #2d1a56 50%, #1e1033 100%); min-height:100vh; display:flex; align-items:center; justify-content:center; padding: 1rem; }
+    .otp-card { background:white; border-radius:20px; padding: clamp(1.25rem, 5vw, 2.5rem); width:100%; max-width:420px; box-shadow:0 25px 60px rgba(0,0,0,0.3); }
   </style>
 </head>
 <body>
