@@ -10,15 +10,16 @@ from django.http import JsonResponse
 from django.db.models import Q, Sum, Count
 from django.core.paginator import Paginator
 from django.utils import timezone
-
 from core.mixins import LoginRequiredMixin
 from core.utils import get_current_month_date_range
-from core.pdf import FactoryPDFReport
+from core.pdf import FactoryPDFReport, generate_qr_image_flowable
 from catalog.models import Client, ProductModel, ProductVariant, ProductionStage, ProductModelStage
+from catalog.services import build_variant_entry_url, build_model_entry_url
 from workers.models import Worker
 from .models import ProductionEntry
 from .forms import ProductionEntryForm, CancelEntryForm
 from .services import create_production_entry, cancel_production_entry, ProductionValidationError
+from django.conf import settings
 
 
 # ─────────────────────────────────────────────
@@ -103,55 +104,54 @@ class DashboardView(View):
 
         if request.GET.get('export') == 'pdf':
             pdf = FactoryPDFReport(
-                title='تقرير متابعة وسجل الإنتاج العام',
+                title='تقرير متابعة وسجل الإنتاج العام للمصنع',
                 subtitle=f'الفترة من {start_date} إلى {end_date}'
             )
-            client_name = 'كل العملاء'
-            if client_id:
-                cl = clients.filter(pk=client_id).first()
-                if cl:
-                    client_name = cl.name
-
+            base_url = request.build_absolute_uri('/')
             pdf.add_header(filters_dict={
                 'الفترة': f'{start_date} إلى {end_date}',
-                'العميل': client_name,
+                'العميل': Client.objects.get(pk=client_id).name if client_id else 'كل العملاء',
             })
             pdf.add_kpis([
-                ('إجمالي القطع المنتجة', f"{total_produced:,} قطعة"),
+                ('إجمالي الإنتاج الفعلي', f"{total_produced:,} قطعة"),
                 ('إجمالي القيمة المالية', f"{total_value:,.2f} ج.م"),
                 ('الموديلات النشطة', f"{active_models:,} موديل"),
                 ('العمال النشطون', f"{active_workers:,} عامل"),
             ])
 
-            # Model Progress Section
+            # Model Progress Table with Register QR codes
             if model_progress:
-                pdf.add_section_title('موقف إنتاج الموديلات والتقدم العام')
+                pdf.add_section_title('موقف إنتاج الموديلات الحالية وأكواد QR للتسجيل')
                 m_rows = []
                 for mp in model_progress:
+                    pm_obj = mp['model']
+                    qr_img = generate_qr_image_flowable(build_model_entry_url(pm_obj, base_url), size=28)
                     m_rows.append([
-                        mp['model'].code,
-                        mp['model'].name,
-                        mp['model'].client.name,
+                        pm_obj.code,
+                        pm_obj.name,
+                        pm_obj.client.name,
                         f"{mp['planned']:,}",
                         f"{mp['overall_pct']}%",
+                        qr_img,
                     ])
                 pdf.add_table(
-                    headers=['الكود', 'اسم الموديل', 'العميل', 'إجمالي المخطط', 'نسبة الإنجاز'],
+                    headers=['الكود', 'اسم الموديل', 'العميل', 'المخطط', 'الإنجاز', 'رمز QR'],
                     rows=m_rows,
-                    col_widths=[80, 165, 140, 80, 70],
+                    col_widths=[75, 140, 120, 70, 65, 65],
                     right_align_cols=[1, 2]
                 )
 
-            # Recent Production Entries
+            # Recent Production Entries with Variant Register QR codes
             recent_entries_full = entries_qs.select_related(
                 'variant__product_model__client', 'variant__color', 'variant__size',
                 'stage', 'worker'
             ).order_by('-production_date', '-created_at')[:35]
 
             if recent_entries_full:
-                pdf.add_section_title('سجلات الإنتاج التفصيلية للفترة المحددة')
+                pdf.add_section_title('سجلات الإنتاج التفصيلية مع أكواد QR للأنواع (Variants)')
                 entry_rows = []
                 for e in recent_entries_full:
+                    v_qr = generate_qr_image_flowable(build_variant_entry_url(e.variant, base_url), size=26)
                     entry_rows.append([
                         str(e.production_date),
                         e.variant.product_model.code,
@@ -160,11 +160,12 @@ class DashboardView(View):
                         e.worker.name,
                         f"{e.quantity:,}",
                         f"{e.total_amount:,.2f} ج.م",
+                        v_qr,
                     ])
                 pdf.add_table(
-                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'العامل', 'الكمية', 'الإجمالي'],
+                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'العامل', 'الكمية', 'الإجمالي', 'رمز QR'],
                     rows=entry_rows,
-                    col_widths=[65, 65, 105, 100, 95, 45, 60],
+                    col_widths=[58, 55, 95, 85, 80, 42, 60, 60],
                     right_align_cols=[1, 2, 3, 4]
                 )
 
@@ -188,9 +189,8 @@ class DashboardView(View):
 
 
 # ─────────────────────────────────────────────
-# Production Entry
+# Production Entry (with Unauthenticated QR Pre-Data Preview)
 # ─────────────────────────────────────────────
-@method_decorator(login_required, name='dispatch')
 class ProductionEntryView(View):
     template_name = 'production/entry.html'
 
@@ -200,20 +200,45 @@ class ProductionEntryView(View):
         initial_client_id = request.GET.get('client', '')
         initial_date = request.GET.get('date', '')
 
-        # If variant_id is provided, resolve model and client
+        # Resolve variant, model, and client if provided
+        variant_obj = None
+        model_obj = None
         if initial_variant_id:
             try:
-                v = ProductVariant.objects.select_related('product_model__client').get(pk=initial_variant_id)
-                initial_model_id = str(v.product_model_id)
-                initial_client_id = str(v.product_model.client_id)
+                variant_obj = ProductVariant.objects.select_related('product_model__client', 'color', 'size').get(pk=initial_variant_id)
+                model_obj = variant_obj.product_model
+                initial_model_id = str(model_obj.pk)
+                initial_client_id = str(model_obj.client_id)
             except ProductVariant.DoesNotExist:
                 pass
-        elif initial_model_id and not initial_client_id:
+        elif initial_model_id:
             try:
-                m = ProductModel.objects.get(pk=initial_model_id)
-                initial_client_id = str(m.client_id)
+                model_obj = ProductModel.objects.select_related('client').prefetch_related('model_stages__stage', 'variants').get(pk=initial_model_id)
+                if not initial_client_id:
+                    initial_client_id = str(model_obj.client_id)
             except ProductModel.DoesNotExist:
                 pass
+
+        # If user is NOT logged in: Show Pre-Data Specs preview card for QR scan
+        if not request.user.is_authenticated:
+            if model_obj or variant_obj:
+                total_planned = variant_obj.planned_quantity if variant_obj else model_obj.total_planned
+                prod_qs = ProductionEntry.objects.filter(is_cancelled=False)
+                if variant_obj:
+                    prod_qs = prod_qs.filter(variant=variant_obj)
+                else:
+                    prod_qs = prod_qs.filter(variant__product_model=model_obj)
+                total_produced = prod_qs.aggregate(q=Sum('quantity'))['q'] or 0
+
+                return render(request, 'production/item_preview.html', {
+                    'model': model_obj,
+                    'variant': variant_obj,
+                    'total_planned': total_planned,
+                    'total_produced': total_produced,
+                })
+            else:
+                login_url = getattr(settings, 'LOGIN_URL', '/auth/login/')
+                return redirect(f"{login_url}?next={request.get_full_path()}")
 
         today_date = timezone.localdate().isoformat()
         form_initial = {'production_date': initial_date if initial_date else today_date}
@@ -238,6 +263,10 @@ class ProductionEntryView(View):
         })
 
     def post(self, request):
+        if not request.user.is_authenticated:
+            login_url = getattr(settings, 'LOGIN_URL', '/auth/login/')
+            return redirect(f"{login_url}?next={request.get_full_path()}")
+
         form = ProductionEntryForm(request.POST)
         clients = Client.objects.filter(is_active=True)
         recent = ProductionEntry.objects.filter(is_cancelled=False).select_related(

@@ -11,8 +11,10 @@ from django.core.paginator import Paginator
 from django.utils import timezone
 
 from catalog.models import Client
+from catalog.services import build_model_entry_url, build_variant_entry_url
 from workers.models import Worker
 from notifications.services import create_and_send_otp, verify_otp
+from core.pdf import FactoryPDFReport, generate_qr_image_flowable
 
 EXTERNAL_SESSION_KEY = 'external_auth'
 
@@ -183,38 +185,43 @@ class ExternalClientDashboardView(View):
                 ('عدد الموديلات المسجلة', f"{models.count():,} موديل"),
             ])
 
+            base_url = request.build_absolute_uri('/')
             if models:
-                pdf.add_section_title('الموديلات المسجلة وخطة الإنتاج')
+                pdf.add_section_title('الموديلات المسجلة وخطة الإنتاج مع أكواد QR')
                 m_rows = []
                 for m in models:
+                    m_qr = generate_qr_image_flowable(build_model_entry_url(m, base_url), size=28)
                     m_rows.append([
                         m.code,
                         m.name,
                         f"{m.variants.count()} نوع",
                         f"{m.total_planned:,} قطعة",
+                        m_qr,
                     ])
                 pdf.add_table(
-                    headers=['الكود', 'اسم الموديل', 'الأنواع', 'إجمالي المخطط'],
+                    headers=['الكود', 'اسم الموديل', 'الأنواع', 'إجمالي المخطط', 'رمز QR'],
                     rows=m_rows,
-                    col_widths=[95, 220, 105, 115],
+                    col_widths=[85, 195, 95, 95, 65],
                     right_align_cols=[1]
                 )
 
             if recent:
-                pdf.add_section_title('سجل عمليات الإنتاج المنفذة خلال الفترة')
+                pdf.add_section_title('سجل عمليات الإنتاج المنفذة مع أكواد QR للأنواع')
                 e_rows = []
                 for e in recent:
+                    v_qr = generate_qr_image_flowable(build_variant_entry_url(e.variant, base_url), size=26)
                     e_rows.append([
                         str(e.production_date),
                         e.variant.product_model.code,
                         f"{e.variant.color.name} / {e.variant.size.name}",
                         e.stage.name,
                         f"{e.quantity:,}",
+                        v_qr,
                     ])
                 pdf.add_table(
-                    headers=['التاريخ', 'الموديل', 'النوع (اللون / المقاس)', 'المرحلة', 'الكمية'],
+                    headers=['التاريخ', 'الموديل', 'النوع (اللون / المقاس)', 'المرحلة', 'الكمية', 'رمز QR'],
                     rows=e_rows,
-                    col_widths=[85, 90, 175, 115, 70],
+                    col_widths=[75, 75, 150, 105, 65, 65],
                     right_align_cols=[2, 3]
                 )
 
@@ -257,6 +264,7 @@ class ExternalWorkerDashboardView(View):
                 title=f'كشف إنتاج ومستحقات العامل: {worker.name}',
                 subtitle=f'الفترة من {start_date} إلى {end_date}'
             )
+            base_url = request.build_absolute_uri('/')
             stage_names = "، ".join([s.name for s in worker.stages.all()]) or 'غير مسند'
             pdf.add_header(filters_dict={
                 'العامل': worker.name,
@@ -270,9 +278,10 @@ class ExternalWorkerDashboardView(View):
             ])
 
             if history:
-                pdf.add_section_title('تفاصيل سجل الإنتاج والأرباح')
+                pdf.add_section_title('تفاصيل سجل الإنتاج والأرباح مع أكواد QR للأنواع')
                 h_rows = []
                 for e in history:
+                    v_qr = generate_qr_image_flowable(build_variant_entry_url(e.variant, base_url), size=26)
                     h_rows.append([
                         str(e.production_date),
                         e.variant.product_model.code,
@@ -280,11 +289,12 @@ class ExternalWorkerDashboardView(View):
                         e.stage.name,
                         f"{e.quantity:,}",
                         f"{e.total_amount:,.2f} ج.م",
+                        v_qr,
                     ])
                 pdf.add_table(
-                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'الكمية', 'الأرباح'],
+                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'الكمية', 'الأرباح', 'رمز QR'],
                     rows=h_rows,
-                    col_widths=[75, 80, 135, 115, 60, 70],
+                    col_widths=[65, 65, 115, 100, 55, 70, 65],
                     right_align_cols=[2, 3]
                 )
 

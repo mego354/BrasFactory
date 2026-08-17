@@ -274,40 +274,45 @@ class ClientDetailView(View):
                 ('عدد الموديلات', f"{models.count():,} موديل"),
             ])
 
-            pdf.add_section_title('موديلات العميل والكميات المخططة')
+            base_url = request.build_absolute_uri('/')
+            pdf.add_section_title('موديلات العميل والكميات المخططة وأكواد QR للتسجيل')
             model_rows = []
             for m in models:
+                m_qr = generate_qr_image_flowable(build_model_entry_url(m, base_url), size=28)
                 model_rows.append([
                     m.code,
                     m.name,
                     f"{m.variants.count()} نوع",
                     f"{m.total_planned:,} قطعة",
                     'نشط' if m.is_active else 'معطل',
+                    m_qr,
                 ])
             pdf.add_table(
-                headers=['الكود', 'اسم الموديل', 'الأنواع', 'المخطط', 'الحالة'],
+                headers=['الكود', 'اسم الموديل', 'الأنواع', 'المخطط', 'الحالة', 'رمز QR'],
                 rows=model_rows,
-                col_widths=[80, 185, 90, 100, 80],
+                col_widths=[75, 160, 80, 85, 65, 70],
                 right_align_cols=[1]
             )
 
             # Recent production entries
             recent = entries.select_related('variant__color', 'variant__size', 'stage').order_by('-created_at')[:25]
             if recent:
-                pdf.add_section_title('آخر سجلات الإنتاج للعميل')
+                pdf.add_section_title('آخر سجلات الإنتاج للعميل مع أكواد QR للأنواع')
                 recent_rows = []
                 for e in recent:
+                    v_qr = generate_qr_image_flowable(build_variant_entry_url(e.variant, base_url), size=26)
                     recent_rows.append([
                         str(e.production_date),
                         e.variant.product_model.code,
                         f"{e.variant.color.name} / {e.variant.size.name}",
                         e.stage.name,
                         f"{e.quantity:,}",
+                        v_qr,
                     ])
                 pdf.add_table(
-                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'الكمية'],
+                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'الكمية', 'رمز QR'],
                     rows=recent_rows,
-                    col_widths=[85, 80, 150, 130, 90],
+                    col_widths=[75, 75, 140, 115, 65, 65],
                     right_align_cols=[2, 3]
                 )
             return pdf.build_response(f'client_{client.code}_report.pdf')

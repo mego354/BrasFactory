@@ -10,9 +10,9 @@ from .models import Worker
 from .forms import WorkerForm
 from .services import get_worker_earnings, get_worker_production_history
 from catalog.models import ProductionStage, Client
+from catalog.services import build_variant_entry_url
 
-
-from core.pdf import FactoryPDFReport
+from core.pdf import FactoryPDFReport, generate_qr_image_flowable
 from core.utils import get_current_month_date_range
 
 
@@ -154,9 +154,11 @@ class WorkerDetailView(View):
             ])
 
             if history:
-                pdf.add_section_title('سجل العمليات والإنتاج المفصل')
+                pdf.add_section_title('سجل العمليات والإنتاج المفصل مع أكواد QR للتسجيل')
                 h_rows = []
+                base_url = request.build_absolute_uri('/')
                 for e in history:
+                    v_qr = generate_qr_image_flowable(build_variant_entry_url(e.variant, base_url), size=26)
                     h_rows.append([
                         str(e.production_date),
                         e.variant.product_model.client.name,
@@ -165,11 +167,12 @@ class WorkerDetailView(View):
                         e.stage.name,
                         f"{e.quantity:,}",
                         f"{e.total_amount:,.2f} ج.م",
+                        v_qr,
                     ])
                 pdf.add_table(
-                    headers=['التاريخ', 'العميل', 'الموديل', 'النوع', 'المرحلة', 'الكمية', 'الأرباح'],
+                    headers=['التاريخ', 'العميل', 'الموديل', 'النوع', 'المرحلة', 'الكمية', 'الأرباح', 'رمز QR'],
                     rows=h_rows,
-                    col_widths=[65, 85, 65, 95, 95, 55, 75],
+                    col_widths=[60, 75, 60, 85, 80, 50, 65, 60],
                     right_align_cols=[1, 2, 3, 4]
                 )
 
