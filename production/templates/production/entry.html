@@ -7,8 +7,93 @@
 {% block content %}
 <div class="grid-2col-responsive">
 
-  <!-- Entry Form (Sticky on desktop, normal flow on mobile) -->
+  <!-- Entry Form (Sticky on desktop) -->
   <div class="card sticky-desktop">
+    {% if logged_worker %}
+    <!-- 👷 Worker Self-Entry Mode -->
+    <div class="card-header" style="background:var(--color-surface-2);border-radius:var(--radius-md) var(--radius-md) 0 0;">
+      <h2 class="card-title">👷 تسجيل إنتاج العامل</h2>
+      <span class="badge" style="background:#0088cc;color:white;font-weight:800;font-size:0.9rem;">{{ logged_worker.name }}</span>
+    </div>
+
+    <form method="post" id="workerProductionForm" style="padding-top:1rem;">
+      {% csrf_token %}
+      <input type="hidden" name="worker" value="{{ logged_worker.pk }}">
+
+      {% if variant_obj %}
+      <input type="hidden" name="variant" id="worker_variant_id" value="{{ variant_obj.pk }}">
+      <!-- Locked Product Specs Card (Read-Only) -->
+      <div style="background:linear-gradient(135deg, rgba(0,136,204,0.06), rgba(110,64,201,0.06));border:1.5px solid #0088cc;border-radius:var(--radius-md);padding:0.875rem;margin-bottom:1.25rem;">
+        <div style="font-size:0.75rem;font-weight:700;color:#0088cc;margin-bottom:0.25rem;">🏷️ بيانات الصنف المحدد (من رمز QR):</div>
+        <div style="font-weight:800;font-size:1.05rem;color:var(--color-text);">{{ variant_obj.product_model.name }} <code style="color:var(--color-primary);">({{ variant_obj.product_model.code }})</code></div>
+        <div style="font-size:0.85rem;color:var(--color-text-muted);margin-top:0.35rem;display:flex;gap:1rem;">
+          <span>اللون: <b style="color:var(--color-text);">{{ variant_obj.color.name }}</b></span>
+          <span>المقاس: <b style="color:var(--color-text);">{{ variant_obj.size.name }}</b></span>
+        </div>
+      </div>
+      {% else %}
+      <div class="alert alert-warning" style="margin-bottom:1.25rem;">
+        ⚠️ يرجى مسح رمز QR الخاص بالصنف لتسجيل الإنتاج عليه مباشرة.
+      </div>
+      {% endif %}
+
+      <!-- Stage Dropdown (Filtered to Worker's assigned stages for this model) -->
+      <div class="form-group">
+        <label class="form-label">مرحلة الإنتاج <span style="color:var(--color-danger);">*</span></label>
+        <select name="stage" id="id_worker_stage" class="form-control" required onchange="handleWorkerStageChange()">
+          <option value="">اختر المرحلة التي أنجزتها...</option>
+          {% for st in worker_stages %}
+          <option value="{{ st.pk }}">{{ st.name }}</option>
+          {% empty %}
+          {% if variant_obj %}
+          <option value="" disabled>لا توجد مراحل مسندة لك في هذا الموديل</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Quantity -->
+      <div class="form-group">
+        <label class="form-label">الكمية المنتجة <span style="color:var(--color-danger);">*</span></label>
+        <input type="number" name="quantity" id="id_worker_qty" class="form-control"
+               min="1" placeholder="أدخل عدد القطع..." required inputmode="numeric"
+               onwheel="this.blur()" oninput="calcWorkerTotal()">
+      </div>
+
+      <!-- Live Calculation Display -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1.25rem;">
+        <div>
+          <div class="form-label">سعر الوحدة للمرحلة</div>
+          <div id="id_worker_unit_price" style="padding:0.6rem;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-weight:700;color:var(--color-primary);">—</div>
+          <input type="hidden" id="id_worker_price_val" value="0">
+        </div>
+        <div>
+          <div class="form-label">إجمالي المستحق لك</div>
+          <div id="id_worker_total_display" style="padding:0.6rem;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-weight:800;color:var(--color-success);font-size:1.05rem;">—</div>
+        </div>
+      </div>
+
+      <!-- Date -->
+      <div class="form-group">
+        <label class="form-label">تاريخ الإنتاج</label>
+        <input type="date" name="production_date" class="form-control" value="{{ today_date }}" required>
+      </div>
+
+      <!-- Optional Notes -->
+      <div class="form-group">
+        <label class="form-label">ملاحظات (اختياري)</label>
+        <input type="text" name="notes" class="form-control" placeholder="أي ملاحظات إضافية">
+      </div>
+
+      <button type="submit" class="btn btn-success btn-lg" style="width:100%;justify-content:center;font-size:1.05rem;font-weight:800;padding:0.85rem;">
+        ✅ تأكيد وتسجيل الإنتاج
+      </button>
+      <a href="{% url 'external:worker_dashboard' %}" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:0.6rem;">
+        ← العودة للوحة التحكم
+      </a>
+    </form>
+    {% else %}
+    <!-- 👔 Staff / Admin Full Entry Mode -->
     <div class="card-header">
       <h2 class="card-title">📝 بيانات الإنتاج اليومي</h2>
       {% if initial_variant_id %}
@@ -22,7 +107,27 @@
           data-initial-variant="{{ initial_variant_id }}">
       {% csrf_token %}
 
-      <!-- Client (AJAX trigger - not submitted) -->
+      <!-- ① Worker Smart Search (FIRST) -->
+      <div class="form-group">
+        <label class="form-label">العامل <span style="color:var(--color-danger);">*</span></label>
+        <div style="position:relative;">
+          <input type="text" id="worker_search_input" class="form-control"
+                 placeholder="اكتب اسم العامل للبحث..." autocomplete="off"
+                 style="padding-left:2.5rem;">
+          <svg style="position:absolute;right:0.7rem;top:50%;transform:translateY(-50%);color:var(--color-text-muted);pointer-events:none;" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+          <div id="worker_dropdown" style="display:none;position:absolute;top:100%;right:0;left:0;background:var(--color-surface);border:1.5px solid var(--color-primary);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);z-index:50;max-height:220px;overflow-y:auto;"></div>
+        </div>
+        <input type="hidden" name="worker" id="id_worker" required>
+        <div id="worker_selected_badge" style="display:none;margin-top:0.4rem;padding:0.4rem 0.75rem;background:var(--color-primary);color:white;border-radius:var(--radius-sm);font-size:0.88rem;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+          <span id="worker_selected_name"></span>
+          <button type="button" onclick="clearWorker()" style="background:none;border:none;color:white;cursor:pointer;font-size:1rem;padding:0;">✕</button>
+        </div>
+        {% if form.worker.errors %}
+        <div class="invalid-feedback" style="display:block;">{{ form.worker.errors.0 }}</div>
+        {% endif %}
+      </div>
+
+      <!-- ② Client (AJAX trigger - not submitted) -->
       <div class="form-group">
         <label class="form-label">العميل <span style="color:var(--color-danger);">*</span></label>
         <select id="id_client" class="form-control" required>
@@ -33,7 +138,7 @@
         </select>
       </div>
 
-      <!-- Product Model (AJAX) -->
+      <!-- ③ Product Model (AJAX) -->
       <div class="form-group">
         <label class="form-label">الموديل <span style="color:var(--color-danger);">*</span></label>
         <select id="id_product_model" class="form-control" disabled required>
@@ -41,7 +146,7 @@
         </select>
       </div>
 
-      <!-- Variant (AJAX) -->
+      <!-- ④ Variant (AJAX) -->
       <div class="form-group">
         <label class="form-label">نوع المنتج (لون / مقاس) <span style="color:var(--color-danger);">*</span></label>
         <select name="variant" id="id_variant" class="form-control" disabled required>
@@ -52,33 +157,26 @@
         {% endif %}
       </div>
 
-      <!-- Stage (AJAX) -->
+      <!-- ⑤ Stage — filtered by worker's skills + model config -->
       <div class="form-group">
         <label class="form-label">مرحلة الإنتاج <span style="color:var(--color-danger);">*</span></label>
         <select name="stage" id="id_stage" class="form-control" disabled required>
           <option value="">اختر المرحلة...</option>
         </select>
+        <div id="stage_hint" style="font-size:0.78rem;color:var(--color-text-muted);margin-top:0.25rem;display:none;">
+          المراحل المعروضة هي التي يمتلكها العامل ومُهيأة لهذا الموديل
+        </div>
         {% if form.stage.errors %}
         <div class="invalid-feedback" style="display:block;">{{ form.stage.errors.0 }}</div>
         {% endif %}
       </div>
 
-      <!-- Worker (AJAX, filtered by stage) -->
-      <div class="form-group">
-        <label class="form-label">العامل <span style="color:var(--color-danger);">*</span></label>
-        <select name="worker" id="id_worker" class="form-control" disabled required>
-          <option value="">اختر العامل...</option>
-        </select>
-        {% if form.worker.errors %}
-        <div class="invalid-feedback" style="display:block;">{{ form.worker.errors.0 }}</div>
-        {% endif %}
-      </div>
-
-      <!-- Quantity -->
+      <!-- ⑥ Quantity -->
       <div class="form-group">
         <label class="form-label">الكمية المنتجة <span style="color:var(--color-danger);">*</span></label>
         <input type="number" name="quantity" id="id_quantity" class="form-control"
                min="1" placeholder="0" required inputmode="numeric"
+               onwheel="this.blur()"
                value="{{ form.quantity.value|default:'' }}">
         {% if form.quantity.errors %}
         <div class="invalid-feedback" style="display:block;">{{ form.quantity.errors.0 }}</div>
@@ -119,6 +217,7 @@
         ✅ حفظ وتأكيد سجل الإنتاج
       </button>
     </form>
+    {% endif %}
   </div>
 
   <!-- Recent Entries List -->
@@ -149,16 +248,20 @@
               <a href="{% url 'catalog:model_detail' entry.variant.product_model.pk %}"
                  style="font-weight:700;color:var(--color-primary);text-decoration:none;display:inline-flex;align-items:center;gap:0.35rem;"
                  title="عرض تفاصيل الموديل">
-                <span>{{ entry.variant.product_model.code }} — {{ entry.variant.product_model.name }}</span>
-                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+               <span>{{ entry.variant.product_model.code }} — {{ entry.variant.product_model.name }}</span>
+               <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
               </a>
               <div style="font-size:0.75rem;color:var(--color-text-muted);margin-top:0.15rem;">
                 {{ entry.variant.color.name }} / {{ entry.variant.size.name }}
-                <span style="opacity:0.6;">({{ entry.variant.product_model.client.name }})</span>
               </div>
             </td>
             <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
-            <td style="font-size:0.85rem;font-weight:600;">{{ entry.worker.name }}</td>
+            <td style="font-size:0.85rem;font-weight:600;">
+              {{ entry.worker.name }}
+              {% if entry.entered_by_worker %}
+              <div style="margin-top:2px;"><span class="badge" style="background:#0088cc;color:white;font-size:0.7rem;">📱 إدخال العامل</span></div>
+              {% endif %}
+            </td>
             <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
             <td style="font-weight:800;font-size:0.85rem;color:var(--color-success);">{{ entry.total_amount|currency_egp }}</td>
             <td>
@@ -182,19 +285,16 @@
   </div>
 </div>
 
-<!-- Cancel Modal -->
+<!-- Cancel Confirmation Modal -->
 <div id="cancelModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);z-index:100;align-items:center;justify-content:center;padding:1rem;">
-  <div class="card" style="max-width:420px;width:100%;margin:auto;box-shadow:var(--shadow-lg);">
-    <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:1rem;color:var(--color-danger);">⚠️ إلغاء سجل الإنتاج</h3>
+  <div class="card" style="max-width:380px;width:100%;margin:auto;box-shadow:var(--shadow-lg);">
+    <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:0.75rem;color:var(--color-danger);">⚠️ تأكيد إلغاء سجل الإنتاج</h3>
+    <p id="cancelModalDesc" style="font-size:0.9rem;color:var(--color-text-muted);margin-bottom:1.25rem;">هل أنت متأكد من رغبتك في إلغاء هذا السجل؟</p>
     <form id="cancelForm" method="post">
       {% csrf_token %}
-      <div class="form-group">
-        <label class="form-label">سبب الإلغاء <span style="color:var(--color-danger);">*</span></label>
-        <textarea name="reason" class="form-control" rows="3" placeholder="أدخل سبب الإلغاء بدقة..." required minlength="5"></textarea>
-      </div>
       <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
-        <button type="submit" class="btn btn-danger" style="flex:1;">تأكيد الإلغاء</button>
-        <button type="button" onclick="closeCancelModal()" class="btn btn-secondary" style="flex:1;">تراجع</button>
+        <button type="submit" class="btn btn-danger" style="flex:1;">✅ نعم، تأكيد الإلغاء</button>
+        <button type="button" onclick="closeCancelModal()" class="btn btn-secondary" style="flex:1;">↩️ تراجع</button>
       </div>
     </form>
   </div>
@@ -203,12 +303,271 @@
 
 {% block extra_js %}
 <script>
+// ─── Worker Self-Entry Helper Functions ─────────────────────────
+function handleWorkerStageChange() {
+  const stageSel = document.getElementById('id_worker_stage');
+  const stageId = stageSel ? stageSel.value : '';
+  const variantInput = document.getElementById('worker_variant_id');
+  const variantId = variantInput ? variantInput.value : '';
+  if (variantId && stageId) {
+    fetch(`/ajax/price-for-stage/?variant_id=${variantId}&stage_id=${stageId}`)
+      .then(r => r.json())
+      .then(data => {
+        const price = parseFloat(data.unit_price) || 0;
+        const priceInput = document.getElementById('id_worker_price_val');
+        if (priceInput) priceInput.value = price;
+        const priceDisplay = document.getElementById('id_worker_unit_price');
+        if (priceDisplay) priceDisplay.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '—';
+        calcWorkerTotal();
+      });
+  }
+}
+
+function calcWorkerTotal() {
+  const priceInput = document.getElementById('id_worker_price_val');
+  const price = priceInput ? (parseFloat(priceInput.value) || 0) : 0;
+  const qtyInput = document.getElementById('id_worker_qty');
+  const qty = qtyInput ? (parseInt(qtyInput.value) || 0) : 0;
+  const total = price * qty;
+  const totalDisplay = document.getElementById('id_worker_total_display');
+  if (totalDisplay) {
+    totalDisplay.textContent = total > 0 ? total.toFixed(2) + ' ج.م' : '—';
+  }
+}
+
+// ─── Staff Mode Dropdowns & Search ─────────────────────────────
+let selectedWorkerId = null;
+let selectedModelId = null;
+let workerSearchTimeout = null;
+
+const workerInput = document.getElementById('worker_search_input');
+const workerDropdown = document.getElementById('worker_dropdown');
+const workerHiddenInput = document.getElementById('id_worker');
+const workerBadge = document.getElementById('worker_selected_badge');
+const workerBadgeName = document.getElementById('worker_selected_name');
+
+if (workerInput) {
+  workerInput.addEventListener('input', function() {
+    const q = this.value.trim();
+    clearTimeout(workerSearchTimeout);
+    if (q.length < 1) { workerDropdown.style.display = 'none'; return; }
+    workerSearchTimeout = setTimeout(() => searchWorkers(q), 200);
+  });
+
+  workerInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const first = workerDropdown.querySelector('.worker-option');
+      if (first) first.click();
+    }
+    if (e.key === 'Escape') workerDropdown.style.display = 'none';
+  });
+}
+
+function searchWorkers(q) {
+  fetch(`/ajax/worker-search/?q=${encodeURIComponent(q)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.workers.length) {
+        workerDropdown.innerHTML = '<div style="padding:0.75rem;color:var(--color-text-muted);font-size:0.85rem;text-align:center;">لا يوجد عمال مطابقون</div>';
+      } else {
+        workerDropdown.innerHTML = data.workers.map((w, i) =>
+          `<div class="worker-option" data-id="${w.id}" data-name="${w.name}"
+                style="padding:0.65rem 0.875rem;cursor:pointer;border-bottom:1px solid var(--color-border);font-size:0.9rem;display:flex;justify-content:space-between;align-items:center;"
+                onmouseover="this.style.background='var(--color-surface-2)'"
+                onmouseout="this.style.background='transparent'"
+                onclick="selectWorker(${w.id}, '${w.name.replace(/'/g, "\\'")}')">
+            <span><strong>${w.name}</strong> <span style="font-size:0.78rem;color:var(--color-text-muted);">(${w.phone || 'بدون هاتف'})</span></span>
+            <span style="font-size:0.75rem;color:var(--color-primary);">${w.stages_count} مرحلة</span>
+          </div>`
+        ).join('');
+      }
+      workerDropdown.style.display = 'block';
+    });
+}
+
+function selectWorker(id, name) {
+  selectedWorkerId = id;
+  if (workerHiddenInput) workerHiddenInput.value = id;
+  if (workerInput) workerInput.value = '';
+  if (workerDropdown) workerDropdown.style.display = 'none';
+  if (workerBadgeName) workerBadgeName.textContent = '👷 ' + name;
+  if (workerBadge) workerBadge.style.display = 'flex';
+  if (selectedModelId) loadStagesByWorkerAndModel();
+}
+
+function clearWorker() {
+  selectedWorkerId = null;
+  if (workerHiddenInput) workerHiddenInput.value = '';
+  if (workerBadge) workerBadge.style.display = 'none';
+  const stageSel = document.getElementById('id_stage');
+  if (stageSel) {
+    stageSel.innerHTML = '<option value="">اختر العامل والموديل أولاً...</option>';
+    stageSel.disabled = true;
+  }
+  const stageHint = document.getElementById('stage_hint');
+  if (stageHint) stageHint.style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  if (workerInput && !workerInput.contains(e.target) && workerDropdown && !workerDropdown.contains(e.target)) {
+    workerDropdown.style.display = 'none';
+  }
+});
+
+// ─── Cascading Dropdowns ───────────────────────────────────────
+const clientSel = document.getElementById('id_client');
+if (clientSel) {
+  clientSel.addEventListener('change', function() {
+    const clientId = this.value;
+    const modelSel = document.getElementById('id_product_model');
+    modelSel.innerHTML = '<option value="">جارٍ التحميل...</option>';
+    modelSel.disabled = true;
+    document.getElementById('id_variant').innerHTML = '<option value="">اختر نوع المنتج...</option>';
+    document.getElementById('id_variant').disabled = true;
+    document.getElementById('id_stage').innerHTML = '<option value="">اختر المرحلة...</option>';
+    document.getElementById('id_stage').disabled = true;
+    document.getElementById('stage_hint').style.display = 'none';
+    selectedModelId = null;
+    if (!clientId) return;
+    fetch(`/ajax/models-by-client/?client_id=${clientId}`)
+      .then(r => r.json())
+      .then(data => {
+        modelSel.innerHTML = '<option value="">اختر الموديل...</option>' +
+          data.models.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+        modelSel.disabled = false;
+      });
+  });
+}
+
+const modelSel = document.getElementById('id_product_model');
+if (modelSel) {
+  modelSel.addEventListener('change', function() {
+    const modelId = this.value;
+    selectedModelId = modelId;
+    const variantSel = document.getElementById('id_variant');
+    const stageSel = document.getElementById('id_stage');
+    variantSel.innerHTML = '<option value="">جارٍ التحميل...</option>';
+    variantSel.disabled = true;
+    stageSel.innerHTML = '<option value="">اختر المرحلة...</option>';
+    stageSel.disabled = true;
+    document.getElementById('stage_hint').style.display = 'none';
+    if (!modelId) return;
+    fetch(`/ajax/variants-by-model/?model_id=${modelId}`)
+      .then(r => r.json())
+      .then(data => {
+        variantSel.innerHTML = '<option value="">اختر نوع المنتج...</option>' +
+          data.variants.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+        variantSel.disabled = false;
+      });
+    if (selectedWorkerId) loadStagesByWorkerAndModel();
+  });
+}
+
+const variantSel = document.getElementById('id_variant');
+if (variantSel) {
+  variantSel.addEventListener('change', function() {
+    const stageSel = document.getElementById('id_stage');
+    const stageId = stageSel ? stageSel.value : '';
+    if (this.value && stageId) fetchPrice(this.value, stageId);
+  });
+}
+
+const stageSel = document.getElementById('id_stage');
+if (stageSel) {
+  stageSel.addEventListener('change', function() {
+    const variantSel = document.getElementById('id_variant');
+    const variantId = variantSel ? variantSel.value : '';
+    if (variantId && this.value) fetchPrice(variantId, this.value);
+    updateTotal();
+  });
+}
+
+const qtyInput = document.getElementById('id_quantity');
+if (qtyInput) {
+  qtyInput.addEventListener('input', updateTotal);
+}
+
+function loadStagesByWorkerAndModel() {
+  if (!selectedWorkerId || !selectedModelId) return;
+  const stageSel = document.getElementById('id_stage');
+  if (!stageSel) return;
+  stageSel.innerHTML = '<option value="">جارٍ التحميل...</option>';
+  stageSel.disabled = true;
+  fetch(`/ajax/stages-by-worker-and-model/?worker_id=${selectedWorkerId}&model_id=${selectedModelId}`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.stages.length) {
+        stageSel.innerHTML = '<option value="">لا توجد مراحل متاحة لهذا العامل والموديل</option>';
+        document.getElementById('stage_hint').style.display = 'none';
+      } else {
+        stageSel.innerHTML = '<option value="">اختر المرحلة...</option>' +
+          data.stages.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        stageSel.disabled = false;
+        document.getElementById('stage_hint').style.display = 'block';
+      }
+    });
+}
+
+function fetchPrice(variantId, stageId) {
+  fetch(`/ajax/price-for-stage/?variant_id=${variantId}&stage_id=${stageId}`)
+    .then(r => r.json())
+    .then(data => {
+      const price = parseFloat(data.unit_price) || 0;
+      const hiddenPrice = document.getElementById('id_unit_price_hidden');
+      if (hiddenPrice) hiddenPrice.value = price;
+      const displayPrice = document.getElementById('id_unit_price_display');
+      if (displayPrice) displayPrice.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '—';
+      updateTotal();
+    });
+}
+
+function updateTotal() {
+  const hiddenPrice = document.getElementById('id_unit_price_hidden');
+  const price = hiddenPrice ? (parseFloat(hiddenPrice.value) || 0) : 0;
+  const qtyInput = document.getElementById('id_quantity');
+  const qty = qtyInput ? (parseInt(qtyInput.value) || 0) : 0;
+  const total = price * qty;
+  const totalDisplay = document.getElementById('id_total_display');
+  if (totalDisplay) {
+    totalDisplay.textContent = total > 0 ? total.toFixed(2) + ' ج.م' : '—';
+  }
+}
+
+// ─── Cancel Modal ──────────────────────────────────────────────
 function showCancelModal(entryId, modelCode) {
   document.getElementById('cancelForm').action = `/entry/${entryId}/cancel/`;
+  document.getElementById('cancelModalDesc').textContent = `هل أنت متأكد من إلغاء سجل الإنتاج للموديل: ${modelCode}؟`;
   document.getElementById('cancelModal').style.display = 'flex';
 }
 function closeCancelModal() {
   document.getElementById('cancelModal').style.display = 'none';
 }
+
+// ─── Initial load from QR params ──────────────────────────────
+(function() {
+  const form = document.getElementById('productionForm');
+  if (!form) return;
+  const initClient = form.dataset.initialClient;
+  const initModel = form.dataset.initialModel;
+  const initVariant = form.dataset.initialVariant;
+  if (initClient) {
+    const clientSel = document.getElementById('id_client');
+    clientSel.dispatchEvent(new Event('change'));
+    if (initModel) {
+      setTimeout(() => {
+        const modelSel = document.getElementById('id_product_model');
+        modelSel.value = initModel;
+        modelSel.dispatchEvent(new Event('change'));
+        if (initVariant) {
+          setTimeout(() => {
+            document.getElementById('id_variant').value = initVariant;
+            document.getElementById('id_variant').dispatchEvent(new Event('change'));
+          }, 500);
+        }
+      }, 500);
+    }
+  }
+})();
 </script>
 {% endblock %}

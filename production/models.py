@@ -40,8 +40,10 @@ class ProductionEntry(models.Model):
     notes = models.TextField(blank=True, verbose_name='ملاحظات')
 
     # Audit
+    entered_by_worker = models.BooleanField(default=False, verbose_name='إدخال ذاتي بواسطة العامل')
     created_by = models.ForeignKey(
-        User, on_delete=models.PROTECT,
+        User, on_delete=models.SET_NULL,
+        null=True, blank=True,
         related_name='created_entries',
         verbose_name='أُنشئ بواسطة'
     )

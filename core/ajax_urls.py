@@ -2,7 +2,8 @@
 from django.urls import path
 from production.views import (
     ajax_models_by_client, ajax_variants_by_model,
-    ajax_stages_by_variant, ajax_workers_by_stage, ajax_price_for_stage
+    ajax_stages_by_variant, ajax_workers_by_stage, ajax_price_for_stage,
+    ajax_worker_search, ajax_stages_by_worker_and_model,
 )
 
 app_name = 'ajax'
@@ -13,4 +14,7 @@ urlpatterns = [
     path('stages-by-variant/', ajax_stages_by_variant, name='stages_by_variant'),
     path('workers-by-stage/', ajax_workers_by_stage, name='workers_by_stage'),
     path('price-for-stage/', ajax_price_for_stage, name='price_for_stage'),
+    # New endpoints for worker-first flow
+    path('worker-search/', ajax_worker_search, name='worker_search'),
+    path('stages-by-worker-and-model/', ajax_stages_by_worker_and_model, name='stages_by_worker_and_model'),
 ]

@@ -59,8 +59,5 @@ class ProductionEntryForm(forms.Form):
 
 
 class CancelEntryForm(forms.Form):
-    reason = forms.CharField(
-        label='سبب الإلغاء',
-        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'أدخل سبب الإلغاء'}),
-        min_length=5
-    )
+    """Simple confirmation form — no reason needed."""
+    pass

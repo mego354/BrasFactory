@@ -12,58 +12,96 @@
       <label class="form-label" style="margin-bottom:0.25rem;">بحث</label>
       <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="الاسم أو الكود أو الهاتف...">
     </div>
-    <div class="filter-group">
-      <label class="form-label" style="margin-bottom:0.25rem;">الحالة</label>
-      <select name="status" class="form-control" data-auto-submit>
-        <option value="">كل الحالات</option>
-        <option value="active" {% if status == 'active' %}selected{% endif %}>نشط</option>
-        <option value="inactive" {% if status == 'inactive' %}selected{% endif %}>غير نشط</option>
-      </select>
-    </div>
     <button type="submit" class="btn btn-primary">بحث</button>
     <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">📄 تحميل PDF</a>
   </form>
 </div>
 
-{% if page_obj.object_list %}
+{% if active_clients %}
 <div class="card">
+  <div class="card-header"><h2 class="card-title">👥 العملاء النشطون ({{ active_clients|length }})</h2></div>
   <div class="table-container">
     <table class="table">
       <thead>
-        <tr><th>الكود</th><th>الاسم</th><th>الهاتف</th><th>الموديلات</th><th>الحالة</th><th>الإجراءات</th></tr>
+        <tr><th>الكود</th><th>الاسم</th><th>الهاتف</th><th>الموديلات</th><th>الإجراءات</th></tr>
       </thead>
       <tbody>
-        {% for client in page_obj %}
+        {% for client in active_clients %}
         <tr>
           <td><code style="background:var(--color-surface-2);padding:2px 6px;border-radius:4px;">{{ client.code }}</code></td>
           <td><a href="{% url 'catalog:client_detail' client.pk %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">{{ client.name }}</a></td>
           <td style="font-size:0.85rem;">{{ client.phone|default:'—' }}</td>
           <td><span class="badge badge-info">{{ client.models_count }}</span></td>
-          <td>{{ client.is_active|status_badge }}</td>
           <td>
             <div class="table-actions">
               <a href="{% url 'catalog:client_detail' client.pk %}" class="btn btn-sm btn-secondary">عرض</a>
               <a href="{% url 'catalog:client_edit' client.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
               <form method="post" action="{% url 'catalog:client_toggle' client.pk %}">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-sm {% if client.is_active %}btn-warning{% else %}btn-success{% endif %}">
-                  {% if client.is_active %}تعطيل{% else %}تفعيل{% endif %}
-                </button>
+                <button type="submit" class="btn btn-sm btn-warning">تعطيل (أرشفة)</button>
               </form>
             </div>
           </td>
         </tr>
+        {% empty %}
+        <tr><td colspan="5" style="text-align:center;color:var(--color-text-muted);padding:1.5rem;">لا يوجد عملاء نشطون</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {% include "partials/pagination.html" %}
 </div>
-{% else %}
+{% endif %}
+
+{% if inactive_clients %}
+<div class="card" style="margin-top:1rem;">
+  <button type="button" onclick="toggleArchive('clients-archive')" class="btn btn-sm btn-secondary" style="width:100%;">
+    📦 عرض الأرشيف ({{ inactive_clients|length }} عميل معطل)
+  </button>
+  <div id="clients-archive" style="display:none;margin-top:0.75rem;">
+    <div class="table-container">
+      <table class="table">
+        <thead>
+          <tr><th>الكود</th><th>الاسم</th><th>الهاتف</th><th>الموديلات</th><th>الإجراءات</th></tr>
+        </thead>
+        <tbody>
+          {% for client in inactive_clients %}
+          <tr style="opacity:0.65;">
+            <td><code style="background:var(--color-surface-2);padding:2px 6px;border-radius:4px;">{{ client.code }}</code></td>
+            <td><a href="{% url 'catalog:client_detail' client.pk %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">{{ client.name }}</a></td>
+            <td style="font-size:0.85rem;">{{ client.phone|default:'—' }}</td>
+            <td><span class="badge badge-info">{{ client.models_count }}</span></td>
+            <td>
+              <div class="table-actions">
+                <a href="{% url 'catalog:client_detail' client.pk %}" class="btn btn-sm btn-secondary">عرض</a>
+                <a href="{% url 'catalog:client_edit' client.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
+                <form method="post" action="{% url 'catalog:client_toggle' client.pk %}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-success">إعادة تفعيل</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if not active_clients and not inactive_clients %}
 <div class="empty-state">
   <div class="empty-state-icon">👥</div>
   <div class="empty-state-title">لا يوجد عملاء</div>
   <a href="{% url 'catalog:client_create' %}" class="btn btn-primary" style="margin-top:1rem;">إضافة عميل</a>
 </div>
 {% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleArchive(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
 {% endblock %}

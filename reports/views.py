@@ -81,17 +81,16 @@ class ReportByModelView(View):
                 table_rows.append([
                     r['variant__product_model__code'],
                     r['variant__product_model__name'],
-                    r['variant__product_model__client__name'],
                     f"{r['total_qty']:,}",
                     f"{r['total_value']:,.2f} ج.م",
                     qr_flowable,
                 ])
 
             pdf.add_table(
-                headers=['كود الموديل', 'اسم الموديل', 'العميل', 'الكمية', 'القيمة', 'رمز QR للتسجيل'],
+                headers=['نوع الموديل', 'اسم الموديل', 'الكمية', 'القيمة', 'رمز QR للتسجيل'],
                 rows=table_rows,
-                col_widths=[75, 140, 120, 65, 75, 60],
-                right_align_cols=[1, 2]
+                col_widths=[80, 195, 75, 90, 95],
+                right_align_cols=[1]
             )
             return pdf.build_response('report_by_model.pdf')
 
@@ -176,17 +175,16 @@ class ReportByClientView(View):
             for r in data:
                 table_rows.append([
                     r['variant__product_model__client__code'],
-                    r['variant__product_model__client__name'],
                     f"{r['total_qty']:,}",
                     f"{r['total_value']:,.2f} ج.م",
                     str(r['model_count']),
                 ])
 
             pdf.add_table(
-                headers=['كود العميل', 'اسم العميل', 'الكمية المنتجة', 'إجمالي القيمة', 'الموديلات'],
+                headers=['كود العميل', 'الكمية المنتجة', 'إجمالي القيمة', 'الموديلات'],
                 rows=table_rows,
-                col_widths=[85, 180, 95, 105, 70],
-                right_align_cols=[1]
+                col_widths=[100, 135, 130, 170],
+                right_align_cols=[]
             )
             return pdf.build_response('report_by_client.pdf')
 

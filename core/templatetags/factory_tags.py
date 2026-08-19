@@ -89,3 +89,11 @@ def percentage(value, total):
         return round((float(value) / float(total)) * 100, 1) if float(total) > 0 else 0
     except (TypeError, ValueError, ZeroDivisionError):
         return 0
+
+
+@register.filter
+def get_item(dictionary, key):
+    """Access dict value by key in templates: {{ mydict|get_item:key }}"""
+    if dictionary is None:
+        return None
+    return dictionary.get(str(key))

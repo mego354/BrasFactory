@@ -50,6 +50,8 @@ class ColorListView(View):
             colors = colors.filter(name__icontains=q)
         return render(request, 'catalog/settings/colors.html', {
             'colors': colors, 'q': q,
+            'active_colors': colors.filter(is_active=True),
+            'inactive_colors': colors.filter(is_active=False),
             'form': ColorForm(),
         })
 
@@ -62,6 +64,8 @@ class ColorListView(View):
         colors = Color.objects.all()
         return render(request, 'catalog/settings/colors.html', {
             'colors': colors, 'form': form,
+            'active_colors': colors.filter(is_active=True),
+            'inactive_colors': colors.filter(is_active=False),
         })
 
 
@@ -101,7 +105,10 @@ class SizeListView(View):
     def get(self, request):
         sizes = Size.objects.all()
         return render(request, 'catalog/settings/sizes.html', {
-            'sizes': sizes, 'form': SizeForm()
+            'sizes': sizes,
+            'active_sizes': sizes.filter(is_active=True),
+            'inactive_sizes': sizes.filter(is_active=False),
+            'form': SizeForm()
         })
 
     def post(self, request):
@@ -111,7 +118,12 @@ class SizeListView(View):
             messages.success(request, 'تم إضافة المقاس بنجاح.')
             return redirect('catalog:size_list')
         sizes = Size.objects.all()
-        return render(request, 'catalog/settings/sizes.html', {'sizes': sizes, 'form': form})
+        return render(request, 'catalog/settings/sizes.html', {
+            'sizes': sizes,
+            'active_sizes': sizes.filter(is_active=True),
+            'inactive_sizes': sizes.filter(is_active=False),
+            'form': form,
+        })
 
 
 @login_required
@@ -131,7 +143,10 @@ class StageListView(View):
     def get(self, request):
         stages = ProductionStage.objects.all()
         return render(request, 'catalog/settings/stages.html', {
-            'stages': stages, 'form': ProductionStageForm()
+            'stages': stages,
+            'active_stages': stages.filter(is_active=True),
+            'inactive_stages': stages.filter(is_active=False),
+            'form': ProductionStageForm()
         })
 
     def post(self, request):
@@ -141,7 +156,12 @@ class StageListView(View):
             messages.success(request, 'تم إضافة المرحلة بنجاح.')
             return redirect('catalog:stage_list')
         stages = ProductionStage.objects.all()
-        return render(request, 'catalog/settings/stages.html', {'stages': stages, 'form': form})
+        return render(request, 'catalog/settings/stages.html', {
+            'stages': stages,
+            'active_stages': stages.filter(is_active=True),
+            'inactive_stages': stages.filter(is_active=False),
+            'form': form,
+        })
 
 
 @login_required
@@ -204,8 +224,13 @@ class ClientListView(View):
 
         paginator = Paginator(clients, 20)
         page = paginator.get_page(request.GET.get('page'))
+        all_clients = Client.objects.annotate(models_count=Count('product_models')).order_by('name')
+        if q:
+            all_clients = all_clients.filter(Q(name__icontains=q) | Q(code__icontains=q) | Q(phone__icontains=q))
         return render(request, 'catalog/clients/list.html', {
-            'page_obj': page, 'q': q, 'status': status
+            'page_obj': page, 'q': q, 'status': status,
+            'active_clients': all_clients.filter(is_active=True),
+            'inactive_clients': all_clients.filter(is_active=False),
         })
 
 
@@ -476,11 +501,48 @@ class ModelWizardStep3(View):
             wiz = request.session[SESSION_KEY]
             wiz['size_ids'] = [s.pk for s in form.cleaned_data['sizes']]
             request.session[SESSION_KEY] = wiz
-            return redirect('catalog:model_wizard_step4')
+            return redirect('catalog:model_wizard_step_quantities')
         return render(request, 'catalog/models/wizard_step3.html', {
             'form': form, 'step': 3,
             'sizes': Size.objects.filter(is_active=True).order_by('sort_order'),
         })
+
+
+@method_decorator(login_required, name='dispatch')
+class ModelWizardStepQuantities(View):
+    """New Step 3b: Enter planned quantity per color × size combination."""
+    def get(self, request):
+        if SESSION_KEY not in request.session:
+            return redirect('catalog:model_wizard_step1')
+        wiz = request.session[SESSION_KEY]
+        colors = Color.objects.filter(pk__in=wiz.get('color_ids', []))
+        sizes = Size.objects.filter(pk__in=wiz.get('size_ids', [])).order_by('sort_order')
+        # Load previously saved quantities if going back
+        saved_quantities = wiz.get('quantities', {})
+        return render(request, 'catalog/models/wizard_step_quantities.html', {
+            'colors': colors, 'sizes': sizes,
+            'saved_quantities': saved_quantities,
+            'wizard': wiz, 'step': '3b',
+        })
+
+    def post(self, request):
+        wiz = request.session.get(SESSION_KEY)
+        if not wiz:
+            return redirect('catalog:model_wizard_step1')
+        colors = Color.objects.filter(pk__in=wiz.get('color_ids', []))
+        sizes = Size.objects.filter(pk__in=wiz.get('size_ids', [])).order_by('sort_order')
+        quantities = {}
+        for color in colors:
+            for size in sizes:
+                key = f"{color.pk}__{size.pk}"
+                raw_val = request.POST.get(f'qty_{key}', '0').strip()
+                try:
+                    quantities[key] = max(0, int(raw_val))
+                except (ValueError, TypeError):
+                    quantities[key] = 0
+        wiz['quantities'] = quantities
+        request.session[SESSION_KEY] = wiz
+        return redirect('catalog:model_wizard_step4')
 
 
 @method_decorator(login_required, name='dispatch')
@@ -504,9 +566,11 @@ class ModelWizardStep4(View):
         for stage in stages:
             selected = request.POST.get(f'stage_{stage.pk}_selected') == 'on'
             price_raw = request.POST.get(f'stage_{stage.pk}_price', '').strip()
-            sort_order = request.POST.get(f'stage_{stage.pk}_order', '0')
             if selected:
                 has_selection = True
+                # Normalize leading-dot format: .2 → 0.2
+                if price_raw.startswith('.'):
+                    price_raw = '0' + price_raw
                 try:
                     price = float(price_raw)
                     if price < 0:
@@ -518,7 +582,7 @@ class ModelWizardStep4(View):
                     'stage_id': stage.pk,
                     'stage_name': stage.name,
                     'unit_price': price,
-                    'sort_order': int(sort_order) if sort_order.isdigit() else 0,
+                    'sort_order': 0,
                 })
 
         if not has_selection:
@@ -541,18 +605,27 @@ class ModelWizardStep4(View):
 
 @method_decorator(login_required, name='dispatch')
 class ModelWizardReview(View):
-    """Step 5: Review before generation."""
+    """Step 6: Review before generation."""
     def get(self, request):
         wiz = request.session.get(SESSION_KEY)
         if not wiz:
             return redirect('catalog:model_wizard_step1')
         colors = Color.objects.filter(pk__in=wiz.get('color_ids', []))
-        sizes = Size.objects.filter(pk__in=wiz.get('size_ids', []))
+        sizes = Size.objects.filter(pk__in=wiz.get('size_ids', [])).order_by('sort_order')
         client = Client.objects.get(pk=wiz['client_id'])
         variant_count = len(wiz.get('color_ids', [])) * len(wiz.get('size_ids', []))
+        # Build quantities preview: {color_id: {size_id: qty}}
+        raw_quantities = wiz.get('quantities', {})
+        quantities_preview = {}
+        for color in colors:
+            for size in sizes:
+                key = f"{color.pk}__{size.pk}"
+                if key not in quantities_preview:
+                    quantities_preview[key] = raw_quantities.get(key, 0)
         return render(request, 'catalog/models/wizard_review.html', {
             'wiz': wiz, 'colors': colors, 'sizes': sizes,
-            'client': client, 'step': 5, 'variant_count': variant_count,
+            'client': client, 'step': 6, 'variant_count': variant_count,
+            'quantities_preview': raw_quantities,
         })
 
 
@@ -583,7 +656,7 @@ class ModelWizardGenerate(View):
                     sort_order=sd.get('sort_order', i),
                 )
 
-            created, existing = generate_variants(model)
+            created, existing = generate_variants(model, quantities=wiz.get('quantities', {}))
 
         request.session.pop(SESSION_KEY, None)
         messages.success(

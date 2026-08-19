@@ -98,7 +98,7 @@ class Client(TimestampMixin):
 # Product Model
 # ─────────────────────────────────────────────
 class ProductModel(TimestampMixin):
-    code = models.CharField(max_length=30, unique=True, verbose_name='كود الموديل')
+    code = models.CharField(max_length=30, unique=True, verbose_name='نوع الموديل')
     name = models.CharField(max_length=100, unique=True, verbose_name='اسم الموديل')
     client = models.ForeignKey(
         Client, on_delete=models.PROTECT,

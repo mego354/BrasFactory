@@ -365,9 +365,67 @@ function initAutoSubmitFilters() {
 }
 
 // ============================================================
+// Global Price Field Handlers
+// Prevents scroll wheel / touch from changing price values.
+// Normalizes leading-dot format: ".2" → "0.2" on form submit.
+// ============================================================
+function initPriceFields() {
+  // Select all number inputs that are price-related (step includes decimals)
+  const priceSelector = 'input[type="number"][step="0.01"], input[type="number"].price-input, input[name*="price"], input[name*="unit_price"]';
+
+  function applyPriceProtection(input) {
+    // Prevent scroll wheel from changing value
+    input.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      this.blur();
+    }, { passive: false });
+
+    // Prevent touch scroll from changing value on mobile
+    input.addEventListener('touchmove', function(e) {
+      e.stopPropagation();
+    }, { passive: true });
+
+    // Allow leading-dot entry (.2 → 0.2) on blur
+    input.addEventListener('blur', function() {
+      const val = this.value.trim();
+      if (val.startsWith('.')) {
+        this.value = '0' + val;
+      }
+    });
+  }
+
+  // Apply to existing elements
+  document.querySelectorAll(priceSelector).forEach(applyPriceProtection);
+
+  // Also apply to dynamically added inputs via MutationObserver
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType === 1) {
+          node.querySelectorAll && node.querySelectorAll(priceSelector).forEach(applyPriceProtection);
+          if (node.matches && node.matches(priceSelector)) applyPriceProtection(node);
+        }
+      });
+    });
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Normalize leading-dot on all forms before submit
+  document.querySelectorAll('form').forEach(form => {
+    form.addEventListener('submit', function() {
+      this.querySelectorAll(priceSelector).forEach(input => {
+        const val = input.value.trim();
+        if (val.startsWith('.')) input.value = '0' + val;
+      });
+    });
+  });
+}
+
+// ============================================================
 // Initialize all components
 // ============================================================
 document.addEventListener('DOMContentLoaded', () => {
   initProductionEntry();
   initAutoSubmitFilters();
+  initPriceFields();
 });

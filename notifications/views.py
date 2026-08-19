@@ -49,17 +49,17 @@ class MagicLoginView(View):
             token_obj = MagicLoginToken.objects.get(token=token)
         except MagicLoginToken.DoesNotExist:
             messages.error(request, 'رابط الدخول غير صالح أو انتهت صلاحيته.')
-            return redirect('external:otp_request')
+            return redirect('accounts:login')
 
         if not token_obj.is_valid:
             messages.error(request, 'عذراً، هذا الرابط مستخدم بالفعل أو انتهت صلاحيته.')
-            return redirect('external:otp_request')
+            return redirect('accounts:login')
 
         # Mark as used immediately (single-use)
         token_obj.is_used = True
         token_obj.save()
 
-        # Create authenticated external portal session
+        # Create authenticated external portal session (1-hour validity)
         request.session[EXTERNAL_SESSION_KEY] = {
             'type': token_obj.entity_type,
             'entity_id': token_obj.entity_id,
@@ -67,8 +67,9 @@ class MagicLoginView(View):
             'authenticated_at': timezone.now().isoformat(),
             'source': 'telegram_magic_login',
         }
+        request.session.set_expiry(3600)  # 1 hour session
 
-        messages.success(request, f'أهلاً بك يا {token_obj.name}! تم تسجيل دخولك بنجاح عبر تليجرام.')
+        messages.success(request, f'أهلاً بك يا {token_obj.name}! تم تسجيل دخولك بنجاح.')
 
         if token_obj.entity_type == 'client':
             return redirect('external:client_dashboard')

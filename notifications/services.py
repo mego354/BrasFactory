@@ -163,9 +163,9 @@ def get_worker_keyboard():
     """Worker Main Menu."""
     return {
         'keyboard': [
-            [{'text': '💰 أرباح ومستحقات اليوم والشهر'}],
-            [{'text': '📋 سجل الإنتاج الأخير'}, {'text': '📄 كشف حساب مفصل (PDF)'}],
-            [{'text': '🔗 فتح لوحة التحكم على الويب'}, {'text': '🚪 تسجيل خروج'}],
+            [{'text': '📱 عرض إنتاجي (رابط مباشر)'}],
+            [{'text': '💰 أرباح ومستحقات الشهر'}, {'text': '📋 سجل الإنتاج الأخير'}],
+            [{'text': '🚪 تسجيل خروج'}],
         ],
         'resize_keyboard': True
     }
@@ -407,66 +407,15 @@ def handle_worker_action(profile: TelegramProfile, text: str, base_url: str) -> 
         TelegramBot.send_message(profile.chat_id, "\n\n".join(lines), reply_markup=get_worker_keyboard())
         return {'status': 'worker_history_sent'}
 
-    # 3. Direct PDF Download
-    if 'PDF' in text or 'كشف حساب' in text or t_low in ('/pdf', 'pdf', '/report', 'report'):
-        summary = get_worker_earnings(worker, start_date, end_date)
-        history = get_worker_production_history(worker, start_date, end_date)
-
-        pdf = FactoryPDFReport(
-            title=f'كشف إنتاج ومستحقات العامل: {worker.name}',
-            subtitle=f'الفترة من {start_date} إلى {end_date}'
-        )
-        stage_names = "، ".join([s.name for s in worker.stages.all()]) or 'غير مسند'
-        pdf.add_header(filters_dict={
-            'العامل': worker.name,
-            'الهاتف': worker.phone or '—',
-            'المراحل': stage_names,
-            'الفترة': f'{start_date} إلى {end_date}',
-        })
-        pdf.add_kpis([
-            ('إجمالي القطع', f"{summary['total_qty']:,} قطعة"),
-            ('إجمالي الأرباح', f"{summary['total_amount']:,.2f} ج.م"),
-            ('عدد السجلات', f"{summary['entry_count']:,} سجل"),
-        ])
-
-        if history:
-            pdf.add_section_title('تفاصيل سجل الإنتاج والأرباح')
-            h_rows = []
-            for e in history:
-                h_rows.append([
-                    str(e.production_date),
-                    e.variant.product_model.code,
-                    f"{e.variant.color.name} / {e.variant.size.name}",
-                    e.stage.name,
-                    f"{e.quantity:,}",
-                    f"{e.total_amount:,.2f} ج.م",
-                ])
-            pdf.add_table(
-                headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'الكمية', 'الأرباح'],
-                rows=h_rows,
-                col_widths=[75, 80, 135, 115, 60, 70],
-                right_align_cols=[2, 3]
-            )
-
-        doc_bytes = pdf.buffer.getvalue()
-        pdf.buffer.close()
-
-        TelegramBot.send_document(
-            profile.chat_id,
-            doc_bytes,
-            f"worker_statement_{worker.pk}_{start_date}.pdf",
-            caption=f"📄 كشف حساب ومستحقات العامل: {worker.name}\nالفترة: {start_date} إلى {end_date}"
-        )
-        return {'status': 'worker_pdf_sent'}
-
-    # 4. Web Portal Magic Login Link
-    if 'الويب' in text or 'لوحة' in text or t_low in ('/web', 'web', '/link', 'link'):
-        token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name)
+    # 3. Web Portal Direct Link (Single-Use 1-Hour Session)
+    if 'إنتاج' in text or 'عرض إنتاجي' in text or 'الويب' in text or 'لوحة' in text or 'رابط' in text or t_low in ('/web', 'web', '/link', 'link', '/production', 'production'):
+        token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
         login_url = f"{base_url.rstrip('/')}/notifications/magic-login/{token_obj.token}/"
         msg = (
-            f"🔗 <b>رابط الدخول المباشر إلى لوحة العامل على الويب:</b>\n\n"
-            f"<a href='{login_url}'>👉 اضغط هنا لفتح لوحة التحكم مباشرة</a>\n\n"
-            f"⏳ <i>هذا الرابط صالح لمرة واحدة خلال 15 دقيقة فقط.</i>"
+            f"👷 <b>مرحباً {worker.name}</b>\n\n"
+            f"🔗 <b>رابط الدخول المباشر إلى لوحة متابعة إنتاجك:</b>\n"
+            f"<a href='{login_url}'>👉 اضغط هنا لفتح صفحة إنتاجك مباشرة</a>\n\n"
+            f"⏱️ <i>هذا الرابط صالح للاستخدام لمرة واحدة فقط ومدة الجلسة ساعة واحدة.</i>"
         )
         TelegramBot.send_message(profile.chat_id, msg, reply_markup=get_worker_keyboard())
         return {'status': 'worker_magic_link_sent'}

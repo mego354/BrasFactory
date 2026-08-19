@@ -55,8 +55,9 @@ def create_production_entry(
     worker_id: int,
     quantity: int,
     production_date,
-    user,
-    notes: str = ''
+    user=None,
+    notes: str = '',
+    entered_by_worker: bool = False,
 ) -> ProductionEntry:
     """
     Create a production entry atomically.
@@ -79,7 +80,8 @@ def create_production_entry(
         total_amount=total,
         production_date=production_date,
         notes=notes,
-        created_by=user,
+        created_by=user if (user and user.is_authenticated) else None,
+        entered_by_worker=entered_by_worker,
     )
     return entry
 

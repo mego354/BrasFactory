@@ -21,7 +21,7 @@
 
   <div class="card">
     <div class="card-header">
-      <h2 class="card-title">🎨 الألوان الحالية ({{ colors|length }})</h2>
+      <h2 class="card-title">🎨 الألوان النشطة ({{ active_colors|length }})</h2>
       <form method="get" style="display:flex;gap:0.5rem;width:100%;max-width:240px;">
         <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="بحث عن لون...">
         <button type="submit" class="btn btn-secondary">🔍</button>
@@ -31,7 +31,7 @@
       <table class="table">
         <thead><tr><th>الاسم</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
         <tbody>
-          {% for color in colors %}
+          {% for color in active_colors %}
           <tr>
             <td><strong>{{ color.name }}</strong></td>
             <td>{{ color.is_active|status_badge }}</td>
@@ -40,19 +40,57 @@
                 <a href="{% url 'catalog:color_edit' color.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
                 <form method="post" action="{% url 'catalog:color_toggle' color.pk %}">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-sm {% if color.is_active %}btn-warning{% else %}btn-success{% endif %}">
-                    {% if color.is_active %}تعطيل{% else %}تفعيل{% endif %}
-                  </button>
+                  <button type="submit" class="btn btn-sm btn-warning">تعطيل (أرشفة)</button>
                 </form>
               </div>
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="3" style="text-align:center;color:var(--color-text-muted);padding:1.5rem;">لا توجد ألوان مسجلة</td></tr>
+          <tr><td colspan="3" style="text-align:center;color:var(--color-text-muted);padding:1.5rem;">لا توجد ألوان نشطة</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+
+    {% if inactive_colors %}
+    <div style="margin-top:1.25rem;">
+      <button type="button" onclick="toggleArchive('colors-archive')" class="btn btn-sm btn-secondary" style="width:100%;">
+        📦 عرض الأرشيف ({{ inactive_colors|length }} لون معطل)
+      </button>
+      <div id="colors-archive" style="display:none;margin-top:0.75rem;">
+        <div class="table-container">
+          <table class="table">
+            <thead><tr><th>الاسم</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <tbody>
+              {% for color in inactive_colors %}
+              <tr style="opacity:0.65;">
+                <td><strong>{{ color.name }}</strong></td>
+                <td>{{ color.is_active|status_badge }}</td>
+                <td>
+                  <div class="table-actions">
+                    <a href="{% url 'catalog:color_edit' color.pk %}" class="btn btn-sm btn-secondary">تعديل</a>
+                    <form method="post" action="{% url 'catalog:color_toggle' color.pk %}">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-success">إعادة تفعيل</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleArchive(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
 {% endblock %}

@@ -26,6 +26,7 @@ urlpatterns = [
     path('models/create/step1/', views.ModelWizardStep1.as_view(), name='model_wizard_step1'),
     path('models/create/step2/', views.ModelWizardStep2.as_view(), name='model_wizard_step2'),
     path('models/create/step3/', views.ModelWizardStep3.as_view(), name='model_wizard_step3'),
+    path('models/create/step-quantities/', views.ModelWizardStepQuantities.as_view(), name='model_wizard_step_quantities'),
     path('models/create/step4/', views.ModelWizardStep4.as_view(), name='model_wizard_step4'),
     path('models/create/review/', views.ModelWizardReview.as_view(), name='model_wizard_review'),
     path('models/create/generate/', views.ModelWizardGenerate.as_view(), name='model_wizard_generate'),

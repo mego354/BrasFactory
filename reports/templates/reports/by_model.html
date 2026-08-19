@@ -39,9 +39,8 @@
     <table class="table">
       <thead>
         <tr>
-          <th>الكود</th>
+          <th>نوع الموديل</th>
           <th>اسم الموديل</th>
-          <th>العميل</th>
           <th>الكمية</th>
           <th>القيمة</th>
           <th>أكواد QR</th>
@@ -60,7 +59,6 @@
               {{ row.variant__product_model__name }}
             </a>
           </td>
-          <td>{{ row.variant__product_model__client__name }}</td>
           <td style="font-weight:800;color:var(--color-primary);">{{ row.total_qty|ar_number }}</td>
           <td style="font-weight:800;color:var(--color-success);">{{ row.total_value|currency_egp }}</td>
           <td>
@@ -70,7 +68,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:2rem;">لا توجد بيانات مطابقة</td></tr>
+        <tr><td colspan="5" style="text-align:center;color:var(--color-text-muted);padding:2rem;">لا توجد بيانات مطابقة</td></tr>
         {% endfor %}
       </tbody>
     </table>

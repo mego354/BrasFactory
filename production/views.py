@@ -129,16 +129,15 @@ class DashboardView(View):
                     m_rows.append([
                         pm_obj.code,
                         pm_obj.name,
-                        pm_obj.client.name,
                         f"{mp['planned']:,}",
                         f"{mp['overall_pct']}%",
                         qr_img,
                     ])
                 pdf.add_table(
-                    headers=['الكود', 'اسم الموديل', 'العميل', 'المخطط', 'الإنجاز', 'رمز QR'],
+                    headers=['نوع الموديل', 'اسم الموديل', 'المخطط', 'الإنجاز', 'رمز QR'],
                     rows=m_rows,
-                    col_widths=[75, 140, 120, 70, 65, 65],
-                    right_align_cols=[1, 2]
+                    col_widths=[80, 195, 85, 65, 110],
+                    right_align_cols=[1]
                 )
 
             # Recent Production Entries with Variant Register QR codes
@@ -200,6 +199,13 @@ class ProductionEntryView(View):
         initial_client_id = request.GET.get('client', '')
         initial_date = request.GET.get('date', '')
 
+        # Check for Worker session from Telegram magic login
+        worker_auth = request.session.get('external_auth')
+        is_worker = bool(worker_auth and worker_auth.get('type') == 'worker')
+        logged_worker = None
+        if is_worker:
+            logged_worker = Worker.objects.filter(pk=worker_auth.get('entity_id'), is_active=True).first()
+
         # Resolve variant, model, and client if provided
         variant_obj = None
         model_obj = None
@@ -219,8 +225,8 @@ class ProductionEntryView(View):
             except ProductModel.DoesNotExist:
                 pass
 
-        # If user is NOT logged in: Show Pre-Data Specs preview card for QR scan
-        if not request.user.is_authenticated:
+        # If user is neither staff nor worker session: Show Specs preview card
+        if not request.user.is_authenticated and not logged_worker:
             if model_obj or variant_obj:
                 total_planned = variant_obj.planned_quantity if variant_obj else model_obj.total_planned
                 prod_qs = ProductionEntry.objects.filter(is_cancelled=False)
@@ -242,14 +248,37 @@ class ProductionEntryView(View):
 
         today_date = timezone.localdate().isoformat()
         form_initial = {'production_date': initial_date if initial_date else today_date}
+        if logged_worker:
+            form_initial['worker'] = logged_worker.pk
+        if variant_obj:
+            form_initial['variant'] = variant_obj.pk
+
         form = ProductionEntryForm(initial=form_initial)
-        recent = ProductionEntry.objects.filter(
-            is_cancelled=False
-        ).select_related(
-            'variant__product_model__client',
-            'variant__color', 'variant__size',
-            'stage', 'worker', 'created_by'
-        ).order_by('-created_at')[:15]
+
+        # Worker's available stages for this model (if worker session)
+        worker_stages = []
+        if logged_worker and model_obj:
+            model_stage_qs = ProductModelStage.objects.filter(
+                product_model=model_obj, is_active=True,
+                stage__in=logged_worker.stages.filter(is_active=True)
+            ).select_related('stage')
+            worker_stages = [ms.stage for ms in model_stage_qs]
+
+        # Recent entries
+        if logged_worker:
+            recent = ProductionEntry.objects.filter(
+                worker=logged_worker, is_cancelled=False
+            ).select_related(
+                'variant__product_model', 'variant__color', 'variant__size',
+                'stage', 'worker'
+            ).order_by('-created_at')[:15]
+        else:
+            recent = ProductionEntry.objects.filter(
+                is_cancelled=False
+            ).select_related(
+                'variant__product_model', 'variant__color', 'variant__size',
+                'stage', 'worker', 'created_by'
+            ).order_by('-created_at')[:15]
 
         clients = Client.objects.filter(is_active=True)
         return render(request, self.template_name, {
@@ -260,17 +289,65 @@ class ProductionEntryView(View):
             'initial_client_id': initial_client_id,
             'initial_model_id': initial_model_id,
             'initial_variant_id': initial_variant_id,
+            'logged_worker': logged_worker,
+            'variant_obj': variant_obj,
+            'model_obj': model_obj,
+            'worker_stages': worker_stages,
         })
 
     def post(self, request):
-        if not request.user.is_authenticated:
+        worker_auth = request.session.get('external_auth')
+        is_worker = bool(worker_auth and worker_auth.get('type') == 'worker')
+        logged_worker = None
+        if is_worker:
+            logged_worker = Worker.objects.filter(pk=worker_auth.get('entity_id'), is_active=True).first()
+
+        if not request.user.is_authenticated and not logged_worker:
             login_url = getattr(settings, 'LOGIN_URL', '/auth/login/')
             return redirect(f"{login_url}?next={request.get_full_path()}")
 
+        # Worker direct submission
+        if logged_worker:
+            variant_id = request.POST.get('variant')
+            stage_id = request.POST.get('stage')
+            quantity_raw = request.POST.get('quantity', '0')
+            production_date = request.POST.get('production_date') or timezone.localdate().isoformat()
+            notes = request.POST.get('notes', '')
+
+            try:
+                quantity = int(quantity_raw)
+                if quantity <= 0:
+                    raise ValueError('الكمية يجب أن تكون أكبر من 0.')
+                if not variant_id or not stage_id:
+                    raise ValueError('يرجى تحديد الموديل والمرحلة.')
+
+                entry = create_production_entry(
+                    variant_id=int(variant_id),
+                    stage_id=int(stage_id),
+                    worker_id=logged_worker.pk,
+                    quantity=quantity,
+                    production_date=production_date,
+                    user=None,
+                    notes=notes,
+                    entered_by_worker=True,
+                )
+                messages.success(
+                    request,
+                    f'✅ تم تسجيل إنتاجك بنجاح: {entry.quantity} قطعة في مرحلة "{entry.stage.name}". '
+                    f'المستحق: {entry.total_amount:.2f} ج.م'
+                )
+                return redirect('external:worker_dashboard')
+            except ProductionValidationError as e:
+                messages.error(request, str(e))
+            except Exception as e:
+                messages.error(request, f'خطأ: {e}')
+            return redirect(request.get_full_path())
+
+        # Staff submission
         form = ProductionEntryForm(request.POST)
         clients = Client.objects.filter(is_active=True)
         recent = ProductionEntry.objects.filter(is_cancelled=False).select_related(
-            'variant__product_model__client', 'variant__color', 'variant__size',
+            'variant__product_model', 'variant__color', 'variant__size',
             'stage', 'worker'
         ).order_by('-created_at')[:15]
 
@@ -284,6 +361,7 @@ class ProductionEntryView(View):
                     production_date=form.cleaned_data['production_date'],
                     user=request.user,
                     notes=form.cleaned_data.get('notes', ''),
+                    entered_by_worker=False,
                 )
                 messages.success(
                     request,
@@ -296,8 +374,9 @@ class ProductionEntryView(View):
             except Exception as e:
                 messages.error(request, f'خطأ غير متوقع: {e}')
 
+        today_date = timezone.localdate().isoformat()
         return render(request, self.template_name, {
-            'form': form, 'recent': recent, 'clients': clients,
+            'form': form, 'recent': recent, 'clients': clients, 'today_date': today_date,
         })
 
 
@@ -308,18 +387,14 @@ class ProductionEntryView(View):
 class CancelEntryView(View):
     def post(self, request, pk):
         entry = get_object_or_404(ProductionEntry, pk=pk)
-        form = CancelEntryForm(request.POST)
-        if form.is_valid():
-            if not request.user.is_staff:
-                messages.error(request, 'فقط المشرفون يمكنهم إلغاء سجلات الإنتاج.')
-                return redirect('production:entry')
-            try:
-                cancel_production_entry(entry, form.cleaned_data['reason'], request.user)
-                messages.success(request, 'تم إلغاء سجل الإنتاج بنجاح.')
-            except ProductionValidationError as e:
-                messages.error(request, str(e))
-        else:
-            messages.error(request, 'يرجى إدخال سبب الإلغاء.')
+        if not request.user.is_staff:
+            messages.error(request, 'فقط المشرفون يمكنهم إلغاء سجلات الإنتاج.')
+            return redirect('production:entry')
+        try:
+            cancel_production_entry(entry, 'تم الإلغاء بواسطة المشرف', request.user)
+            messages.success(request, 'تم إلغاء سجل الإنتاج بنجاح.')
+        except ProductionValidationError as e:
+            messages.error(request, str(e))
         return redirect(request.META.get('HTTP_REFERER', 'production:entry'))
 
 
@@ -401,3 +476,48 @@ def ajax_price_for_stage(request):
         return JsonResponse({'unit_price': str(ms.unit_price)})
     except (ProductVariant.DoesNotExist, ProductModelStage.DoesNotExist):
         return JsonResponse({'unit_price': 0})
+
+
+@login_required
+def ajax_worker_search(request):
+    """Smart worker search — returns workers matching the query string."""
+    q = request.GET.get('q', '').strip()
+    if len(q) < 1:
+        return JsonResponse({'workers': []})
+    workers = Worker.objects.filter(
+        name__icontains=q, is_active=True
+    ).order_by('name')[:10]
+    return JsonResponse({
+        'workers': [{'id': w.pk, 'name': w.name} for w in workers]
+    })
+
+
+@login_required
+def ajax_stages_by_worker_and_model(request):
+    """
+    Return stages that are BOTH:
+    1. Assigned to this worker
+    2. Configured (with price) for this product model
+    """
+    worker_id = request.GET.get('worker_id')
+    model_id = request.GET.get('model_id')
+    if not worker_id or not model_id:
+        return JsonResponse({'stages': []})
+    try:
+        worker = Worker.objects.get(pk=worker_id, is_active=True)
+    except Worker.DoesNotExist:
+        return JsonResponse({'stages': []})
+
+    # Stages assigned to this worker AND configured for this model
+    model_stages = ProductModelStage.objects.filter(
+        product_model_id=model_id, is_active=True
+    ).select_related('stage')
+    worker_stage_ids = set(worker.stages.filter(is_active=True).values_list('id', flat=True))
+
+    result = []
+    for ms in model_stages:
+        if ms.stage_id in worker_stage_ids:
+            result.append({'id': ms.stage.pk, 'name': ms.stage.name})
+
+    return JsonResponse({'stages': result})
+

@@ -20,12 +20,12 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><h2 class="card-title">📏 المقاسات الحالية ({{ sizes|length }})</h2></div>
+    <div class="card-header"><h2 class="card-title">📏 المقاسات النشطة ({{ active_sizes|length }})</h2></div>
     <div class="table-container">
       <table class="table">
         <thead><tr><th>المقاس</th><th>الترتيب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
         <tbody>
-          {% for size in sizes %}
+          {% for size in active_sizes %}
           <tr>
             <td><strong>{{ size.name }}</strong></td>
             <td>{{ size.sort_order }}</td>
@@ -34,19 +34,57 @@
               <div class="table-actions">
                 <form method="post" action="{% url 'catalog:size_toggle' size.pk %}">
                   {% csrf_token %}
-                  <button type="submit" class="btn btn-sm {% if size.is_active %}btn-warning{% else %}btn-success{% endif %}">
-                    {% if size.is_active %}تعطيل{% else %}تفعيل{% endif %}
-                  </button>
+                  <button type="submit" class="btn btn-sm btn-warning">تعطيل (أرشفة)</button>
                 </form>
               </div>
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:1.5rem;">لا توجد مقاسات مسجلة</td></tr>
+          <tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:1.5rem;">لا توجد مقاسات نشطة</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+
+    {% if inactive_sizes %}
+    <div style="margin-top:1.25rem;">
+      <button type="button" onclick="toggleArchive('sizes-archive')" class="btn btn-sm btn-secondary" style="width:100%;">
+        📦 عرض الأرشيف ({{ inactive_sizes|length }} مقاس معطل)
+      </button>
+      <div id="sizes-archive" style="display:none;margin-top:0.75rem;">
+        <div class="table-container">
+          <table class="table">
+            <thead><tr><th>المقاس</th><th>الترتيب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <tbody>
+              {% for size in inactive_sizes %}
+              <tr style="opacity:0.65;">
+                <td><strong>{{ size.name }}</strong></td>
+                <td>{{ size.sort_order }}</td>
+                <td>{{ size.is_active|status_badge }}</td>
+                <td>
+                  <div class="table-actions">
+                    <form method="post" action="{% url 'catalog:size_toggle' size.pk %}">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-success">إعادة تفعيل</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleArchive(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
 {% endblock %}

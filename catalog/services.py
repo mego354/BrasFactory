@@ -25,15 +25,17 @@ def generate_sku(model_code: str, color_name: str, size_name: str) -> str:
     return f"{model_part}-{color_part}-{size_part}"
 
 
-def generate_variants(product_model: ProductModel) -> tuple[int, int]:
+def generate_variants(product_model: ProductModel, quantities: dict = None) -> tuple[int, int]:
     """
     Generate or update ProductVariant records for all Color × Size combinations.
+    quantities: optional dict mapping 'colorId__sizeId' -> planned_quantity integer.
     Returns (created_count, existing_count).
     """
     created = 0
     existing = 0
     colors = product_model.colors.filter(is_active=True)
     sizes = product_model.sizes.filter(is_active=True)
+    quantities = quantities or {}
 
     with transaction.atomic():
         for color in colors:
@@ -48,15 +50,22 @@ def generate_variants(product_model: ProductModel) -> tuple[int, int]:
                     sku = f"{base_sku}-{counter}"
                     counter += 1
 
-                _, was_created = ProductVariant.objects.get_or_create(
+                qty_key = f"{color.pk}__{size.pk}"
+                planned_qty = int(quantities.get(qty_key, 0))
+
+                variant, was_created = ProductVariant.objects.get_or_create(
                     product_model=product_model,
                     color=color,
                     size=size,
-                    defaults={'sku': sku, 'planned_quantity': 0}
+                    defaults={'sku': sku, 'planned_quantity': planned_qty}
                 )
                 if was_created:
                     created += 1
                 else:
+                    # Update planned quantity if provided
+                    if qty_key in quantities:
+                        variant.planned_quantity = planned_qty
+                        variant.save(update_fields=['planned_quantity'])
                     existing += 1
 
     return created, existing

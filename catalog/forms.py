@@ -24,15 +24,12 @@ class SizeForm(forms.ModelForm):
 class ProductionStageForm(forms.ModelForm):
     class Meta:
         model = ProductionStage
-        fields = ['name', 'description', 'sort_order', 'is_active']
+        fields = ['name', 'is_active']
         labels = {
-            'name': 'اسم المرحلة', 'description': 'الوصف',
-            'sort_order': 'الترتيب', 'is_active': 'نشط'
+            'name': 'اسم المرحلة', 'is_active': 'نشط'
         }
         widgets = {
-            'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
-            'sort_order': forms.NumberInput(attrs={'class': 'form-control'}),
+            'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'مثال: قص، خياطة، تشطيب...'}),
         }
 
 
@@ -59,11 +56,11 @@ class ModelStep1Form(forms.ModelForm):
         model = ProductModel
         fields = ['code', 'name', 'client', 'description']
         labels = {
-            'code': 'كود الموديل', 'name': 'اسم الموديل',
+            'code': 'نوع الموديل', 'name': 'اسم الموديل',
             'client': 'العميل', 'description': 'الوصف'
         }
         widgets = {
-            'code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'مثال: BR-100'}),
+            'code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'مثال: سوتيان، توب، بروتيل...'}),
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'client': forms.Select(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
