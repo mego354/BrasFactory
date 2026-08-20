@@ -544,29 +544,54 @@ function closeCancelModal() {
   document.getElementById('cancelModal').style.display = 'none';
 }
 
-// ─── Initial load from QR params ──────────────────────────────
-(function() {
-  const form = document.getElementById('productionForm');
-  if (!form) return;
-  const initClient = form.dataset.initialClient;
-  const initModel = form.dataset.initialModel;
-  const initVariant = form.dataset.initialVariant;
-  if (initClient) {
-    const clientSel = document.getElementById('id_client');
-    clientSel.dispatchEvent(new Event('change'));
-    if (initModel) {
-      setTimeout(() => {
-        const modelSel = document.getElementById('id_product_model');
-        modelSel.value = initModel;
-        modelSel.dispatchEvent(new Event('change'));
-        if (initVariant) {
-          setTimeout(() => {
-            document.getElementById('id_variant').value = initVariant;
-            document.getElementById('id_variant').dispatchEvent(new Event('change'));
-          }, 500);
-        }
-      }, 500);
+  // ─── Worker Self-Entry Calculations ─────────────────────────
+  window.handleWorkerStageChange = function() {
+    const stageSel = document.getElementById('id_worker_stage');
+    const stageId = stageSel ? stageSel.value : '';
+    const variantInput = document.getElementById('worker_variant_id');
+    const variantId = variantInput ? variantInput.value : '';
+    
+    if (variantId && stageId) {
+      fetch(`/ajax/price-for-stage/?variant_id=${variantId}&stage_id=${stageId}`)
+        .then(r => r.json())
+        .then(data => {
+          const price = parseFloat(data.unit_price) || 0;
+          const hiddenPrice = document.getElementById('id_worker_price_val');
+          if (hiddenPrice) hiddenPrice.value = price;
+          const displayPrice = document.getElementById('id_worker_unit_price');
+          if (displayPrice) displayPrice.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '—';
+          calcWorkerTotal();
+        })
+        .catch(err => {
+          console.error("Price fetch error:", err);
+          calcWorkerTotal();
+        });
+    } else {
+      const hiddenPrice = document.getElementById('id_worker_price_val');
+      if (hiddenPrice) hiddenPrice.value = '0';
+      const displayPrice = document.getElementById('id_worker_unit_price');
+      if (displayPrice) displayPrice.textContent = '—';
+      calcWorkerTotal();
     }
+  };
+
+  window.calcWorkerTotal = function() {
+    const hiddenPrice = document.getElementById('id_worker_price_val');
+    const price = hiddenPrice ? (parseFloat(hiddenPrice.value) || 0) : 0;
+    const qtyInput = document.getElementById('id_worker_qty');
+    const qty = qtyInput ? (parseInt(qtyInput.value) || 0) : 0;
+    const total = price * qty;
+    const totalDisplay = document.getElementById('id_worker_total_display');
+    if (totalDisplay) {
+      totalDisplay.textContent = total > 0 ? total.toFixed(2) + ' ج.م' : '—';
+    }
+  };
+
+  // Auto-trigger if worker has only 1 stage
+  const workerStageSel = document.getElementById('id_worker_stage');
+  if (workerStageSel && workerStageSel.options.length === 2) {
+    workerStageSel.selectedIndex = 1;
+    handleWorkerStageChange();
   }
 })();
 </script>

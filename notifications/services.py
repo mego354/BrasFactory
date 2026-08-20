@@ -420,7 +420,7 @@ def handle_worker_action(profile: TelegramProfile, text: str, base_url: str) -> 
     # ── Open Dashboard (Magic Link) ──
     if text in ('🌐 فتح لوحة التحكم',) or t_low in ('/web', 'web', '/link', 'link', '/dashboard', 'dashboard'):
         token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
-        login_url = f"{base_url.rstrip('/')}/notifications/magic-login/{token_obj.token}/"
+        login_url = f"{base_url.rstrip('/')}/workers/telegram-login/{token_obj.token}/"
         msg = (
             f"👷 <b>مرحباً {worker.name}</b>\n\n"
             f"🔗 <b>رابط الدخول المباشر إلى لوحة متابعة إنتاجك:</b>\n"
@@ -433,13 +433,13 @@ def handle_worker_action(profile: TelegramProfile, text: str, base_url: str) -> 
     # ── Start Production / QR Scan ──
     if text in ('📱 تسجيل إنتاج جديد',) or t_low in ('/production', 'production', '/qr', 'qr', '/scan', 'scan'):
         token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
-        entry_url = f"{base_url.rstrip('/')}/notifications/magic-login/{token_obj.token}/"
+        entry_url = f"{base_url.rstrip('/')}/workers/telegram-login/{token_obj.token}/?next=/production/entry/"
         msg = (
             f"📱 <b>تسجيل إنتاج جديد</b>\n\n"
-            f"1️⃣ امسح رمز QR الخاص بالصنف المراد تسجيله بكاميرا الهاتف.\n"
-            f"2️⃣ أو افتح رابط الدخول أدناه ثم اختر الصنف والمرحلة:\n\n"
+            f"1️⃣ <b>مسح QR للصنف:</b> امسح كود QR المطبوع على أمر الشغل أو الصنف بكاميرا هاتفك.\n"
+            f"2️⃣ <b>أو الدخول المباشر:</b> اضغط على الرابط أدناه لتسجيل الدخول والبدء:\n\n"
             f"<a href='{entry_url}'>👉 رابط تسجيل الإنتاج</a>\n\n"
-            f"⏱️ <i>الرابط صالح لمرة واحدة لمدة ساعة.</i>"
+            f"⏱️ <i>الرابط صالح للاستخدام لمرة واحدة ومدة الجلسة ساعة.</i>"
         )
         TelegramBot.send_message(profile.chat_id, msg, reply_markup=get_worker_keyboard())
         return {'status': 'worker_production_link_sent'}

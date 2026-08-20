@@ -80,10 +80,20 @@
     </div>
   </div>
 
-  <!-- Action Login Button -->
-  <div style="display:flex;flex-direction:column;gap:0.6rem;">
-    <a href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}" class="btn btn-primary" style="width:100%;justify-content:center;min-height:44px;font-weight:800;">
-      🔐 تسجيل الدخول لتسجيل الإنتاج
+  <!-- Action Buttons for Workers and Staff -->
+  <div style="display:flex;flex-direction:column;gap:0.75rem;">
+    <div style="background:linear-gradient(135deg, rgba(0,136,204,0.08), rgba(110,64,201,0.08));border:1.5px solid #0088cc;border-radius:var(--radius-md, 12px);padding:1rem;text-align:center;">
+      <div style="font-weight:800;color:#0088cc;font-size:1rem;margin-bottom:0.35rem;">👷 هل أنت عامل في المصنع؟</div>
+      <p style="font-size:0.82rem;color:var(--color-text-muted);margin-bottom:0.75rem;">
+        افتح بوت التليجرام الخاص بالمصنع واضغط <b>"🌐 فتح لوحة التحكم"</b> أو <b>"📱 تسجيل إنتاج جديد"</b> للدخول الفوري وتأكيد الإنتاج لهذا الصنف.
+      </p>
+      <a href="https://t.me/RoseRed_fact_bot" target="_blank" class="btn btn-primary" style="background:#0088cc;border-color:#0088cc;width:100%;justify-content:center;font-weight:800;">
+        📱 فتح بوت تليجرام للدخول
+      </a>
+    </div>
+
+    <a href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}" class="btn btn-secondary" style="width:100%;justify-content:center;min-height:40px;font-size:0.85rem;">
+      👔 تسجيل دخول المشرفين / الإدارة
     </a>
   </div>
 </div>

@@ -349,6 +349,9 @@ class WorkerTelegramDirectLoginView(View):
         }
         request.session.set_expiry(3600)  # 1 hour session
         messages.success(request, f'أهلاً بك يا {worker.name}! تم تسجيل دخولك بنجاح.')
+        next_url = request.GET.get('next')
+        if next_url and next_url.startswith('/'):
+            return redirect(next_url)
         return redirect('external:worker_dashboard')
 
 
