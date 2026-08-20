@@ -85,10 +85,10 @@
     <div style="background:linear-gradient(135deg, rgba(0,136,204,0.08), rgba(110,64,201,0.08));border:1.5px solid #0088cc;border-radius:var(--radius-md, 12px);padding:1rem;text-align:center;">
       <div style="font-weight:800;color:#0088cc;font-size:1rem;margin-bottom:0.35rem;">👷 هل أنت عامل في المصنع؟</div>
       <p style="font-size:0.82rem;color:var(--color-text-muted);margin-bottom:0.75rem;">
-        افتح بوت التليجرام الخاص بالمصنع واضغط <b>"🌐 فتح لوحة التحكم"</b> أو <b>"📱 تسجيل إنتاج جديد"</b> للدخول الفوري وتأكيد الإنتاج لهذا الصنف.
+        اضغط على الزر أدناه لفتح بوت التليجرام وتأكيد هويتك، وسيتم فتح شاشة تسجيل الإنتاج لهذا الصنف مباشرة:
       </p>
-      <a href="https://t.me/RoseRed_fact_bot" target="_blank" class="btn btn-primary" style="background:#0088cc;border-color:#0088cc;width:100%;justify-content:center;font-weight:800;">
-        📱 فتح بوت تليجرام للدخول
+      <a href="https://t.me/RoseRed_fact_bot?start={% if variant %}qr_{{ variant.pk }}{% else %}m_{{ model.pk }}{% endif %}" target="_blank" class="btn btn-primary" style="background:#0088cc;border-color:#0088cc;width:100%;justify-content:center;font-weight:800;padding:0.65rem 1rem;">
+        📱 تأكيد الهوية عبر تليجرام وتسجيل الإنتاج
       </a>
     </div>
 

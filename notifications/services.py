@@ -183,7 +183,6 @@ def get_worker_keyboard():
             [{'text': '📅 إنتاجي اليوم'}],
             [{'text': '📊 إنتاج هذا الشهر'}, {'text': '📊 إنتاج الشهر الماضي'}],
             [{'text': '🌐 فتح لوحة التحكم'}],
-            [{'text': '📱 تسجيل إنتاج جديد'}],
             [{'text': '🚪 تسجيل خروج'}],
         ],
         'resize_keyboard': True
@@ -343,12 +342,51 @@ def handle_contact_login(profile: TelegramProfile, phone: str, base_url: str) ->
 
 
 def handle_start_command(profile: TelegramProfile, text: str, base_url: str) -> dict:
-    """Handles /start command with auto-routing and deep-link parameters."""
+    """Handles /start command with auto-routing, QR item scans, and deep-link parameters."""
     parts = text.strip().split(maxsplit=1)
     param = parts[1].strip() if len(parts) > 1 else ''
 
+    # ── Handle QR Scan from Work Order / Item ──
+    if param.startswith('qr_') or param.startswith('entry_') or param.startswith('m_'):
+        from catalog.models import ProductVariant, ProductModel
+        variant = None
+        model = None
+        if param.startswith('qr_') or param.startswith('entry_'):
+            v_id = param.split('_', 1)[1]
+            if v_id.isdigit():
+                variant = ProductVariant.objects.select_related('product_model', 'color', 'size').filter(pk=int(v_id)).first()
+        elif param.startswith('m_'):
+            m_id = param.split('_', 1)[1]
+            if m_id.isdigit():
+                model = ProductModel.objects.filter(pk=int(m_id)).first()
+
+        # If user is already authenticated worker
+        if profile.is_authenticated and profile.entity_type == 'worker' and profile.entity_id:
+            worker = Worker.objects.filter(pk=profile.entity_id, is_active=True).first()
+            if worker:
+                token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
+                next_url = f"/production/entry/?variant={variant.pk}" if variant else (f"/production/entry/?model={model.pk}" if model else "/production/entry/")
+                login_url = f"{base_url.rstrip('/')}/workers/telegram-login/{token_obj.token}/?next={next_url}"
+
+                item_desc = f"{variant.product_model.code} ({variant.color.name} / {variant.size.name})" if variant else (model.code if model else "الصنف المحدد")
+                msg = (
+                    f"👷 مرحباً <b>{worker.name}</b>\n\n"
+                    f"📦 <b>مسح رمز الصنف:</b> {item_desc}\n\n"
+                    f"👉 <a href='{login_url}'>اضغط هنا لتسجيل إنتاجك لهذا الصنف</a>\n\n"
+                    f"⏱️ <i>الرابط صالح للاستخدام لمرة واحدة فقط لمدة ساعة.</i>"
+                )
+                TelegramBot.send_message(profile.chat_id, msg, reply_markup=get_worker_keyboard())
+                return {'status': 'qr_scan_entry_sent', 'worker_id': worker.pk}
+        else:
+            welcome_text = (
+                f"🏭 <b>مرحباً بك في نظام {FACTORY_INFO['name']}</b>\n\n"
+                f"لتسجيل إنتاج الصنف الممسوح، يرجى <b>مشاركة رقم هاتفك المسجل</b> أدناه لتسجيل الدخول الفوري."
+            )
+            TelegramBot.send_message(profile.chat_id, welcome_text, reply_markup=get_login_keyboard())
+            return {'status': 'prompted_login_for_qr'}
+
+    # ── Handle Worker Deep-Link Binding (e.g. /start w_1) ──
     if param:
-        # Check if param is w_<id> or worker_<id> or integer pk or phone
         worker = None
         if param.startswith('w_') or param.startswith('worker_'):
             w_id = param.split('_', 1)[1]
@@ -372,7 +410,7 @@ def handle_start_command(profile: TelegramProfile, text: str, base_url: str) -> 
             welcome_msg = (
                 f"✅ <b>تم الربط والتحقق بنجاح!</b>\n\n"
                 f"مرحباً بك يا <b>{worker.name}</b> (عامل إنتاج).\n"
-                f"يمكنك الآن استخدام القائمة أدناه لمتابعة إنتاجك أو الدخول لتسجيل إنتاج جديد."
+                f"يمكنك الآن استخدام القائمة أدناه لمتابعة إنتاجك الشخصي."
             )
             TelegramBot.send_message(profile.chat_id, welcome_msg, reply_markup=get_worker_keyboard())
             return {'status': 'authenticated_via_start_param', 'worker_id': worker.pk}
@@ -489,7 +527,7 @@ def handle_worker_action(profile: TelegramProfile, text: str, base_url: str) -> 
         TelegramBot.send_message(profile.chat_id, "\n".join(lines), reply_markup=get_worker_keyboard())
         return {'status': 'worker_last_month_sent'}
 
-    # ── Open Dashboard (Magic Link) ──
+    # ── Open Dashboard (Magic Link - Single-Use) ──
     if text in ('🌐 فتح لوحة التحكم',) or t_low in ('/web', 'web', '/link', 'link', '/dashboard', 'dashboard'):
         token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
         login_url = f"{base_url.rstrip('/')}/workers/telegram-login/{token_obj.token}/"
@@ -501,20 +539,6 @@ def handle_worker_action(profile: TelegramProfile, text: str, base_url: str) -> 
         )
         TelegramBot.send_message(profile.chat_id, msg, reply_markup=get_worker_keyboard())
         return {'status': 'worker_dashboard_link_sent'}
-
-    # ── Start Production / QR Scan ──
-    if text in ('📱 تسجيل إنتاج جديد',) or t_low in ('/production', 'production', '/qr', 'qr', '/scan', 'scan'):
-        token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
-        entry_url = f"{base_url.rstrip('/')}/workers/telegram-login/{token_obj.token}/?next=/production/entry/"
-        msg = (
-            f"📱 <b>تسجيل إنتاج جديد</b>\n\n"
-            f"1️⃣ <b>مسح QR للصنف:</b> امسح كود QR المطبوع على أمر الشغل أو الصنف بكاميرا هاتفك.\n"
-            f"2️⃣ <b>أو الدخول المباشر:</b> اضغط على الرابط أدناه لتسجيل الدخول والبدء:\n\n"
-            f"<a href='{entry_url}'>👉 رابط تسجيل الإنتاج</a>\n\n"
-            f"⏱️ <i>الرابط صالح للاستخدام لمرة واحدة ومدة الجلسة ساعة.</i>"
-        )
-        TelegramBot.send_message(profile.chat_id, msg, reply_markup=get_worker_keyboard())
-        return {'status': 'worker_production_link_sent'}
 
     # Fallback: resend menu
     TelegramBot.send_message(
