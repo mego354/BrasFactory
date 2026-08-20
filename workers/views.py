@@ -274,7 +274,7 @@ class WorkerDetailView(View):
         page = paginator.get_page(request.GET.get('page'))
 
         # Generate telegram bot deep link for instant binding
-        telegram_bot_deep_link = f"https://t.me/RoseRed_fact_bot?start=w_{worker.pk}"
+        telegram_bot_deep_link = f"https://t.me/Testing_Factory_Bot?start=w_{worker.pk}"
 
         # Generate single-use telegram login token (1 hour validity)
         token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
@@ -306,7 +306,7 @@ class GenerateWorkerTelegramLinkView(View):
         login_url = request.build_absolute_uri(
             reverse('workers:telegram_direct_login', kwargs={'token': token_obj.token})
         )
-        deep_link = f"https://t.me/RoseRed_fact_bot?start=w_{worker.pk}"
+        deep_link = f"https://t.me/Testing_Factory_Bot?start=w_{worker.pk}"
         return JsonResponse({
             'status': 'ok',
             'worker_id': worker.pk,
