@@ -31,8 +31,8 @@ def get_filters(request):
 class ReportIndexView(View):
     def get(self, request):
         reports = [
+            {'url': '/reports/by-worker/', 'icon': '👷', 'title': 'حسابات العمال (Worker Accounting)', 'subtitle': 'كشوف حسابات ومستحقات وإنتاج العمال'},
             {'url': '/reports/by-model/', 'icon': '📦', 'title': 'تقرير الموديلات', 'subtitle': 'إنتاج مجمع حسب الموديل'},
-            {'url': '/reports/by-worker/', 'icon': '👷', 'title': 'تقرير العمال', 'subtitle': 'أرباح وإنتاج كل عامل'},
             {'url': '/reports/by-client/', 'icon': '👥', 'title': 'تقرير العملاء', 'subtitle': 'قيمة الإنتاج لكل عميل'},
             {'url': '/reports/by-stage/', 'icon': '⚙️', 'title': 'تقرير المراحل', 'subtitle': 'إنتاج وتكلفة كل مرحلة'},
         ]
@@ -43,7 +43,9 @@ class ReportIndexView(View):
 class ReportByModelView(View):
     def get(self, request):
         filters = get_filters(request)
-        data = services.production_by_model(filters)
+        data = list(services.production_by_model(filters))
+        # Sort by total quantity descending
+        data.sort(key=lambda x: x.get('total_qty', 0), reverse=True)
         summary = services.overall_summary(filters)
         clients = Client.objects.filter(is_active=True)
 
@@ -55,7 +57,7 @@ class ReportByModelView(View):
                     client_name = cl.name
 
             pdf = FactoryPDFReport(
-                title='تقرير الإنتاج المجمع حسب الموديل وأكواد QR للتسجيل',
+                title='تقرير الإنتاج المجمع حسب الموديل (مرتب حسب الكمية)',
                 subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
             )
             base_url = request.build_absolute_uri('/')
@@ -68,7 +70,7 @@ class ReportByModelView(View):
             pdf.add_kpis([
                 ('إجمالي الكمية المنتجة', f"{summary['total_qty']:,} قطعة"),
                 ('إجمالي القيمة الإجمالية', f"{summary['total_value']:,.2f} ج.م"),
-                ('عدد سجلات الإنتاج', f"{summary['entry_count']:,} سجل"),
+                ('عدد الموديلات النشطة', f"{len(data):,} موديل"),
             ])
 
             table_rows = []
@@ -76,7 +78,7 @@ class ReportByModelView(View):
                 m_id = r.get('variant__product_model__id')
                 c_id = r.get('variant__product_model__client_id')
                 register_url = f"{entry_base_url}?client={c_id}&model={m_id}" if (c_id and m_id) else entry_base_url
-                qr_flowable = generate_qr_image_flowable(register_url, size=32)
+                qr_flowable = generate_qr_image_flowable(register_url, size=30)
 
                 table_rows.append([
                     r['variant__product_model__code'],
@@ -87,7 +89,7 @@ class ReportByModelView(View):
                 ])
 
             pdf.add_table(
-                headers=['نوع الموديل', 'اسم الموديل', 'الكمية', 'القيمة', 'رمز QR للتسجيل'],
+                headers=['نوع الموديل', 'اسم الموديل', 'إجمالي الكمية', 'القيمة الإجمالية', 'رمز QR'],
                 rows=table_rows,
                 col_widths=[80, 195, 75, 90, 95],
                 right_align_cols=[1]
@@ -103,7 +105,9 @@ class ReportByModelView(View):
 class ReportByWorkerView(View):
     def get(self, request):
         filters = get_filters(request)
-        data = services.production_by_worker(filters)
+        data = list(services.production_by_worker(filters))
+        # Sort workers by total earnings descending (highest earners first)
+        data.sort(key=lambda x: x.get('total_earnings', 0), reverse=True)
         summary = services.overall_summary(filters)
         stages = ProductionStage.objects.filter(is_active=True)
 
@@ -115,8 +119,8 @@ class ReportByWorkerView(View):
                     stage_name = st.name
 
             pdf = FactoryPDFReport(
-                title='تقرير إنتاج ومستحقات العمال',
-                subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
+                title='كشف حسابات ومستحقات العمال (Worker Accounting Report)',
+                subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']} — مرتب حسب إجمالي المستحقات"
             )
             pdf.add_header(filters_dict={
                 'الفترة': f"{filters['start_date']} إلى {filters['end_date']}",
@@ -129,9 +133,9 @@ class ReportByWorkerView(View):
             ])
 
             table_rows = []
-            for r in data:
+            for rank, r in enumerate(data, 1):
                 table_rows.append([
-                    r['worker__name'],
+                    f"{rank}. {r['worker__name']}",
                     f"{r['total_qty']:,}",
                     f"{r['total_earnings']:,.2f} ج.م",
                     str(r['entry_count']),
@@ -143,7 +147,7 @@ class ReportByWorkerView(View):
                 col_widths=[205, 110, 120, 100],
                 right_align_cols=[0]
             )
-            return pdf.build_response('report_by_worker.pdf')
+            return pdf.build_response('worker_accounting_report.pdf')
 
         return render(request, 'reports/by_worker.html', {
             'data': data, 'summary': summary, 'filters': filters, 'stages': stages
@@ -154,12 +158,14 @@ class ReportByWorkerView(View):
 class ReportByClientView(View):
     def get(self, request):
         filters = get_filters(request)
-        data = services.production_by_client(filters)
+        data = list(services.production_by_client(filters))
+        # Sort clients by total value descending
+        data.sort(key=lambda x: x.get('total_value', 0), reverse=True)
         summary = services.overall_summary(filters)
 
         if request.GET.get('export') == 'pdf':
             pdf = FactoryPDFReport(
-                title='تقرير إنتاج ومبيعات العملاء',
+                title='تقرير إنتاج ومبيعات العملاء (مرتب حسب القيمة)',
                 subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
             )
             pdf.add_header(filters_dict={
@@ -197,12 +203,14 @@ class ReportByClientView(View):
 class ReportByStageView(View):
     def get(self, request):
         filters = get_filters(request)
-        data = services.production_by_stage(filters)
+        data = list(services.production_by_stage(filters))
+        # Sort stages by total quantity descending
+        data.sort(key=lambda x: x.get('total_qty', 0), reverse=True)
         summary = services.overall_summary(filters)
 
         if request.GET.get('export') == 'pdf':
             pdf = FactoryPDFReport(
-                title='تقرير تكلفة وإنتاج مراحل التشغيل',
+                title='تقرير تكلفة وإنتاج مراحل التشغيل (مرتب حسب الكمية)',
                 subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
             )
             pdf.add_header(filters_dict={
