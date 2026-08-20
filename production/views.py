@@ -257,18 +257,27 @@ class ProductionEntryView(View):
 
         # Worker's available stages for this model (if worker session)
         worker_stages = []
-        if logged_worker and model_obj:
-            model_stage_qs = ProductModelStage.objects.filter(
-                product_model=model_obj, is_active=True,
-                stage__in=logged_worker.stages.filter(is_active=True)
-            ).select_related('stage')
-            worker_stages = [ms.stage for ms in model_stage_qs]
+        worker_has_no_stages = False
+        if logged_worker:
+            target_model = model_obj or (variant_obj.product_model if variant_obj else None)
+            if target_model:
+                model_stage_qs = ProductModelStage.objects.filter(
+                    product_model=target_model, is_active=True,
+                    stage__in=logged_worker.stages.filter(is_active=True)
+                ).select_related('stage')
+                worker_stages = [ms.stage for ms in model_stage_qs]
+                if not worker_stages:
+                    worker_has_no_stages = True
 
         # Recent entries
         if logged_worker:
-            recent = ProductionEntry.objects.filter(
+            recent_qs = ProductionEntry.objects.filter(
                 worker=logged_worker, is_cancelled=False
-            ).select_related(
+            )
+            target_model = model_obj or (variant_obj.product_model if variant_obj else None)
+            if target_model:
+                recent_qs = recent_qs.filter(variant__product_model=target_model)
+            recent = recent_qs.select_related(
                 'variant__product_model', 'variant__color', 'variant__size',
                 'stage', 'worker'
             ).order_by('-created_at')[:15]
@@ -293,6 +302,7 @@ class ProductionEntryView(View):
             'variant_obj': variant_obj,
             'model_obj': model_obj,
             'worker_stages': worker_stages,
+            'worker_has_no_stages': worker_has_no_stages,
         })
 
     def post(self, request):
@@ -311,7 +321,7 @@ class ProductionEntryView(View):
             variant_id = request.POST.get('variant')
             stage_id = request.POST.get('stage')
             quantity_raw = request.POST.get('quantity', '0')
-            production_date = request.POST.get('production_date') or timezone.localdate().isoformat()
+            production_date = timezone.localdate().isoformat()  # Worker cannot change production date
             notes = request.POST.get('notes', '')
 
             try:

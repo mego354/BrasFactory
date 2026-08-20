@@ -80,7 +80,7 @@
       <a href="{% url 'production:entry' %}" class="btn btn-sm" style="background:#16a34a;color:white;font-weight:700;">
         ➕ تسجيل إنتاج
       </a>
-      <a href="?year={{ month_ctx.selected_year }}&month={{ month_ctx.selected_month }}&export=pdf" class="btn btn-sm" style="background:#6e40c9;color:white;">
+      <a href="?period={{ period_ctx.period }}&export=pdf" class="btn btn-sm" style="background:#6e40c9;color:white;">
         📄 كشف الحساب (PDF)
       </a>
       <a href="{% url 'external:logout' %}" class="btn btn-sm" style="background:rgba(255,255,255,0.18);color:white;">خروج</a>
@@ -88,27 +88,24 @@
   </header>
 
   <main class="page-container" style="max-width:1100px;margin:1.5rem auto;padding:0 1rem;">
-    <!-- Month Navigation -->
-    <div class="month-nav-box">
-      <div style="display:flex;align-items:center;gap:0.5rem;">
-        <a href="?year={{ month_ctx.prev_year }}&month={{ month_ctx.prev_month }}" class="btn btn-sm btn-secondary" title="الشهر السابق">
-          ← {{ month_ctx.prev_month }}/{{ month_ctx.prev_year }}
-        </a>
-        <div style="font-weight:800;font-size:1.15rem;color:#6e40c9;min-width:140px;text-align:center;">
-          📅 {{ month_ctx.month_name }} {{ month_ctx.selected_year }}
-        </div>
-        <a href="?year={{ month_ctx.next_year }}&month={{ month_ctx.next_month }}" class="btn btn-sm btn-secondary" title="الشهر التالي">
-          {{ month_ctx.next_month }}/{{ month_ctx.next_year }} →
-        </a>
+    <!-- Period Navigation (Today, This Month, Last Month Only) -->
+    <div class="month-nav-box" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;">
+      <div style="font-weight:800;font-size:1.1rem;color:#6e40c9;display:flex;align-items:center;gap:0.5rem;">
+        <span>📊 عرض الإنتاج:</span>
+        <span style="color:#1e293b;">{{ period_ctx.title }}</span>
       </div>
 
-      <div style="display:flex;gap:0.5rem;align-items:center;">
-        <a href="?year={{ month_ctx.this_year }}&month={{ month_ctx.this_month }}"
-           class="btn btn-sm {% if month_ctx.is_current_month %}btn-primary{% else %}btn-secondary{% endif %}">
+      <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+        <a href="?period=today"
+           class="btn btn-sm {% if period_ctx.is_today %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;">
+          📅 إنتاج اليوم
+        </a>
+        <a href="?period=this_month"
+           class="btn btn-sm {% if period_ctx.is_this_month %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;">
           🌟 الشهر الحالي
         </a>
-        <a href="?year={{ month_ctx.last_month_year }}&month={{ month_ctx.last_month_month }}"
-           class="btn btn-sm {% if month_ctx.is_last_month %}btn-primary{% else %}btn-secondary{% endif %}">
+        <a href="?period=last_month"
+           class="btn btn-sm {% if period_ctx.is_last_month %}btn-primary{% else %}btn-secondary{% endif %}" style="font-weight:700;">
           ⏪ الشهر السابق
         </a>
       </div>
@@ -118,7 +115,7 @@
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem;">
       <div class="stat-card">
         <div class="stat-card-value" style="color:#6e40c9;">{{ summary.total_qty|ar_number }}</div>
-        <div class="stat-card-label">إجمالي القطع المنتجة ({{ month_ctx.month_name }})</div>
+        <div class="stat-card-label">إجمالي القطع المنتجة ({{ period_ctx.subtitle }})</div>
       </div>
       <div class="stat-card">
         <div class="stat-card-value" style="font-size:1.35rem;color:#16a34a;">{{ summary.total_amount|currency_egp }}</div>
@@ -146,7 +143,7 @@
     <div style="margin-bottom:1.5rem;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
         <h2 style="font-size:1.15rem;font-weight:800;color:#1e293b;">
-          📊 تفاصيل الإنتاج حسب الموديل والمرحلة ({{ month_ctx.month_name }} {{ month_ctx.selected_year }})
+          📊 تفاصيل الإنتاج حسب الموديل والمرحلة ({{ period_ctx.title }})
         </h2>
       </div>
 
@@ -180,7 +177,7 @@
       {% else %}
         <div class="card" style="padding:2.5rem 1rem;text-align:center;">
           <div style="font-size:2.5rem;margin-bottom:0.5rem;">📋</div>
-          <div style="font-weight:700;color:#475569;font-size:1.05rem;">لا توجد عمليات إنتاج مسجلة في شهر {{ month_ctx.month_name }} {{ month_ctx.selected_year }}</div>
+          <div style="font-weight:700;color:#475569;font-size:1.05rem;">لا توجد عمليات إنتاج مسجلة في {{ period_ctx.title }}</div>
           <p style="color:#94a3b8;font-size:0.85rem;margin-top:0.25rem;">يمكنك تسجيل إنتاجك الآن عبر مسح رمز QR للصنف أو الضغط على زر "تسجيل إنتاج"</p>
         </div>
       {% endif %}

@@ -37,15 +37,21 @@
       </div>
       {% endif %}
 
+      {% if worker_has_no_stages %}
+      <div class="alert alert-danger" style="margin-bottom:1.25rem;">
+        ⚠️ <b>تنبيه:</b> ليس لديك مراحل عمل مسندة في هذا الموديل ({{ model_obj.code }}). يرجى مراجعة المشرف لإسناد المراحل لك.
+      </div>
+      {% endif %}
+
       <!-- Stage Dropdown (Filtered to Worker's assigned stages for this model) -->
       <div class="form-group">
         <label class="form-label">مرحلة الإنتاج <span style="color:var(--color-danger);">*</span></label>
-        <select name="stage" id="id_worker_stage" class="form-control" required onchange="handleWorkerStageChange()">
+        <select name="stage" id="id_worker_stage" class="form-control" required onchange="handleWorkerStageChange()" {% if worker_has_no_stages %}disabled{% endif %}>
           <option value="">اختر المرحلة التي أنجزتها...</option>
           {% for st in worker_stages %}
           <option value="{{ st.pk }}">{{ st.name }}</option>
           {% empty %}
-          {% if variant_obj %}
+          {% if variant_obj or model_obj %}
           <option value="" disabled>لا توجد مراحل مسندة لك في هذا الموديل</option>
           {% endif %}
           {% endfor %}
@@ -58,7 +64,7 @@
         <label class="form-label">الكمية المنتجة <span style="color:var(--color-danger);">*</span></label>
         <input type="number" name="quantity" id="id_worker_qty" class="form-control"
                min="1" placeholder="أدخل عدد القطع..." required inputmode="numeric"
-               onwheel="this.blur()" oninput="calcWorkerTotal()">
+               onwheel="this.blur()" oninput="calcWorkerTotal()" {% if worker_has_no_stages %}disabled{% endif %}>
         <div id="worker_qty_warning" style="display:none;color:var(--color-danger);font-size:0.82rem;margin-top:0.35rem;font-weight:700;"></div>
       </div>
 
@@ -75,19 +81,23 @@
         </div>
       </div>
 
-      <!-- Date -->
+      <!-- Date (Locked to Today for Worker) -->
       <div class="form-group">
         <label class="form-label">تاريخ الإنتاج</label>
-        <input type="date" name="production_date" class="form-control" value="{{ today_date }}" required>
+        <div style="padding:0.6rem 0.85rem;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:var(--radius-md);font-weight:700;color:var(--color-text);display:flex;align-items:center;justify-content:space-between;">
+          <span>📅 {{ today_date }} (اليوم)</span>
+          <span class="badge badge-purple" style="font-size:0.75rem;">تاريخ اليوم تلقائياً</span>
+        </div>
+        <input type="hidden" name="production_date" value="{{ today_date }}">
       </div>
 
       <!-- Optional Notes -->
       <div class="form-group">
         <label class="form-label">ملاحظات (اختياري)</label>
-        <input type="text" name="notes" class="form-control" placeholder="أي ملاحظات إضافية">
+        <input type="text" name="notes" class="form-control" placeholder="أي ملاحظات إضافية" {% if worker_has_no_stages %}disabled{% endif %}>
       </div>
 
-      <button type="submit" class="btn btn-success btn-lg" style="width:100%;justify-content:center;font-size:1.05rem;font-weight:800;padding:0.85rem;">
+      <button type="submit" class="btn btn-success btn-lg" style="width:100%;justify-content:center;font-size:1.05rem;font-weight:800;padding:0.85rem;" {% if worker_has_no_stages %}disabled style="opacity:0.5;cursor:not-allowed;"{% endif %}>
         ✅ تأكيد وتسجيل الإنتاج
       </button>
       <a href="{% url 'external:worker_dashboard' %}" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:0.6rem;">
@@ -227,7 +237,13 @@
   <!-- Recent Entries List -->
   <div>
     <div class="card-header" style="margin-bottom:1rem;">
-      <h2 class="card-title">📋 آخر سجلات الإنتاج المسجلة</h2>
+      <h2 class="card-title">
+        {% if logged_worker %}
+        📋 آخر سجلات إنتاجك المسجلة {% if model_obj %}لموديل ({{ model_obj.code }}){% endif %}
+        {% else %}
+        📋 آخر سجلات الإنتاج المسجلة
+        {% endif %}
+      </h2>
     </div>
 
     {% if recent %}
@@ -307,35 +323,95 @@
 
 {% block extra_js %}
 <script>
-// ─── Worker Self-Entry Helper Functions ─────────────────────────
+// ─── Cancel Modal ──────────────────────────────────────────────
+function showCancelModal(entryId, modelCode, quantity) {
+  document.getElementById('cancelForm').action = `/entry/${entryId}/cancel/`;
+  const qtyText = quantity ? ` بكمية (${quantity} قطعة)` : '';
+  document.getElementById('cancelModalDesc').textContent = `هل أنت متأكد من إلغاء سجل الإنتاج للموديل: ${modelCode}${qtyText}؟`;
+  document.getElementById('cancelModal').style.display = 'flex';
+}
+function closeCancelModal() {
+  document.getElementById('cancelModal').style.display = 'none';
+}
+
+// ─── Worker Self-Entry Calculations ─────────────────────────
 function handleWorkerStageChange() {
   const stageSel = document.getElementById('id_worker_stage');
   const stageId = stageSel ? stageSel.value : '';
   const variantInput = document.getElementById('worker_variant_id');
   const variantId = variantInput ? variantInput.value : '';
+  const hintEl = document.getElementById('worker_qty_hint');
+  const qtyInput = document.getElementById('id_worker_qty');
+
   if (variantId && stageId) {
     fetch(`/ajax/price-for-stage/?variant_id=${variantId}&stage_id=${stageId}`)
       .then(r => r.json())
       .then(data => {
         const price = parseFloat(data.unit_price) || 0;
-        const priceInput = document.getElementById('id_worker_price_val');
-        if (priceInput) priceInput.value = price;
-        const priceDisplay = document.getElementById('id_worker_unit_price');
-        if (priceDisplay) priceDisplay.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '—';
+        const planned = parseInt(data.planned_quantity) || 0;
+        const produced = parseInt(data.produced_quantity) || 0;
+        const remaining = parseInt(data.remaining_quantity) || 0;
+
+        const hiddenPrice = document.getElementById('id_worker_price_val');
+        if (hiddenPrice) hiddenPrice.value = price;
+        const displayPrice = document.getElementById('id_worker_unit_price');
+        if (displayPrice) displayPrice.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '0.00 ج.م';
+
+        if (hintEl) {
+          hintEl.style.display = 'block';
+          if (remaining <= 0) {
+            hintEl.style.color = 'var(--color-danger)';
+            hintEl.style.borderColor = 'var(--color-danger)';
+            hintEl.innerHTML = `⚠️ <b>تم استكمال هذه المرحلة:</b> المخطط: ${planned} | المنفذ: ${produced} | <b>المتبقي: 0</b>`;
+          } else {
+            hintEl.style.color = 'var(--color-text)';
+            hintEl.style.borderColor = 'var(--color-border)';
+            hintEl.innerHTML = `📊 المخطط: <b>${planned}</b> | المنفذ: <b>${produced}</b> | <span style="color:var(--color-success);">المتبقي: <b>${remaining} قطعة</b></span>`;
+          }
+        }
+
+        if (qtyInput) {
+          qtyInput.dataset.remaining = remaining;
+          qtyInput.max = remaining;
+        }
+
+        calcWorkerTotal();
+      })
+      .catch(err => {
+        console.error("Price fetch error:", err);
         calcWorkerTotal();
       });
+  } else {
+    const hiddenPrice = document.getElementById('id_worker_price_val');
+    if (hiddenPrice) hiddenPrice.value = '0';
+    const displayPrice = document.getElementById('id_worker_unit_price');
+    if (displayPrice) displayPrice.textContent = '—';
+    if (hintEl) hintEl.style.display = 'none';
+    calcWorkerTotal();
   }
 }
 
 function calcWorkerTotal() {
-  const priceInput = document.getElementById('id_worker_price_val');
-  const price = priceInput ? (parseFloat(priceInput.value) || 0) : 0;
+  const hiddenPrice = document.getElementById('id_worker_price_val');
+  const price = hiddenPrice ? (parseFloat(hiddenPrice.value) || 0) : 0;
   const qtyInput = document.getElementById('id_worker_qty');
   const qty = qtyInput ? (parseInt(qtyInput.value) || 0) : 0;
+  const remaining = qtyInput && qtyInput.dataset.remaining !== undefined ? parseInt(qtyInput.dataset.remaining) : null;
+  const warningEl = document.getElementById('worker_qty_warning');
+
+  if (warningEl && remaining !== null) {
+    if (qty > remaining) {
+      warningEl.style.display = 'block';
+      warningEl.textContent = `⚠️ الكمية المدخلة (${qty}) أكبر من المتبقي المخطط (${remaining} قطعة)!`;
+    } else {
+      warningEl.style.display = 'none';
+    }
+  }
+
   const total = price * qty;
   const totalDisplay = document.getElementById('id_worker_total_display');
   if (totalDisplay) {
-    totalDisplay.textContent = total > 0 ? total.toFixed(2) + ' ج.م' : '—';
+    totalDisplay.textContent = total > 0 ? total.toFixed(2) + ' ج.م' : (qty > 0 && price === 0 ? '0.00 ج.م' : '—');
   }
 }
 
@@ -411,6 +487,7 @@ function clearWorker() {
   }
   const stageHint = document.getElementById('stage_hint');
   if (stageHint) stageHint.style.display = 'none';
+  clearStaffPrice();
 }
 
 document.addEventListener('click', function(e) {
@@ -432,6 +509,7 @@ if (clientSel) {
     document.getElementById('id_stage').innerHTML = '<option value="">اختر المرحلة...</option>';
     document.getElementById('id_stage').disabled = true;
     document.getElementById('stage_hint').style.display = 'none';
+    clearStaffPrice();
     selectedModelId = null;
     if (!clientId) return;
     fetch(`/ajax/models-by-client/?client_id=${clientId}`)
@@ -456,6 +534,7 @@ if (modelSel) {
     stageSel.innerHTML = '<option value="">اختر المرحلة...</option>';
     stageSel.disabled = true;
     document.getElementById('stage_hint').style.display = 'none';
+    clearStaffPrice();
     if (!modelId) return;
     fetch(`/ajax/variants-by-model/?model_id=${modelId}`)
       .then(r => r.json())
@@ -473,7 +552,11 @@ if (variantSel) {
   variantSel.addEventListener('change', function() {
     const stageSel = document.getElementById('id_stage');
     const stageId = stageSel ? stageSel.value : '';
-    if (this.value && stageId) fetchPrice(this.value, stageId);
+    if (this.value && stageId) {
+      fetchPrice(this.value, stageId);
+    } else {
+      clearStaffPrice();
+    }
   });
 }
 
@@ -482,14 +565,30 @@ if (stageSel) {
   stageSel.addEventListener('change', function() {
     const variantSel = document.getElementById('id_variant');
     const variantId = variantSel ? variantSel.value : '';
-    if (variantId && this.value) fetchPrice(variantId, this.value);
-    updateTotal();
+    if (variantId && this.value) {
+      fetchPrice(variantId, this.value);
+    } else {
+      clearStaffPrice();
+    }
   });
 }
 
 const qtyInput = document.getElementById('id_quantity');
 if (qtyInput) {
   qtyInput.addEventListener('input', updateTotal);
+}
+
+function clearStaffPrice() {
+  const hiddenPrice = document.getElementById('id_unit_price_hidden');
+  if (hiddenPrice) hiddenPrice.value = '';
+  const displayPrice = document.getElementById('id_unit_price_display');
+  if (displayPrice) displayPrice.textContent = '—';
+  const totalDisplay = document.getElementById('id_total_display');
+  if (totalDisplay) totalDisplay.textContent = '—';
+  const hintEl = document.getElementById('staff_qty_hint');
+  if (hintEl) hintEl.style.display = 'none';
+  const warningEl = document.getElementById('staff_qty_warning');
+  if (warningEl) warningEl.style.display = 'none';
 }
 
 function loadStagesByWorkerAndModel() {
@@ -509,11 +608,23 @@ function loadStagesByWorkerAndModel() {
           data.stages.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
         stageSel.disabled = false;
         document.getElementById('stage_hint').style.display = 'block';
+
+        if (data.stages.length === 1) {
+          stageSel.value = data.stages[0].id;
+          const variantSel = document.getElementById('id_variant');
+          if (variantSel && variantSel.value) {
+            fetchPrice(variantSel.value, stageSel.value);
+          }
+        }
       }
     });
 }
 
 function fetchPrice(variantId, stageId) {
+  if (!variantId || !stageId) {
+    clearStaffPrice();
+    return;
+  }
   fetch(`/ajax/price-for-stage/?variant_id=${variantId}&stage_id=${stageId}`)
     .then(r => r.json())
     .then(data => {
@@ -525,7 +636,7 @@ function fetchPrice(variantId, stageId) {
       const hiddenPrice = document.getElementById('id_unit_price_hidden');
       if (hiddenPrice) hiddenPrice.value = price;
       const displayPrice = document.getElementById('id_unit_price_display');
-      if (displayPrice) displayPrice.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '—';
+      if (displayPrice) displayPrice.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '0.00 ج.م';
 
       const hintEl = document.getElementById('staff_qty_hint');
       const qtyInput = document.getElementById('id_quantity');
@@ -547,6 +658,10 @@ function fetchPrice(variantId, stageId) {
         qtyInput.dataset.remaining = remaining;
         qtyInput.max = remaining;
       }
+      updateTotal();
+    })
+    .catch(err => {
+      console.error("Staff price fetch error:", err);
       updateTotal();
     });
 }
@@ -571,110 +686,58 @@ function updateTotal() {
   const total = price * qty;
   const totalDisplay = document.getElementById('id_total_display');
   if (totalDisplay) {
-    totalDisplay.textContent = total > 0 ? total.toFixed(2) + ' ج.م' : '—';
+    totalDisplay.textContent = total > 0 ? total.toFixed(2) + ' ج.م' : (qty > 0 && price === 0 ? '0.00 ج.م' : '—');
   }
 }
 
-// ─── Cancel Modal ──────────────────────────────────────────────
-function showCancelModal(entryId, modelCode, quantity) {
-  document.getElementById('cancelForm').action = `/entry/${entryId}/cancel/`;
-  const qtyText = quantity ? ` بكمية (${quantity} قطعة)` : '';
-  document.getElementById('cancelModalDesc').textContent = `هل أنت متأكد من إلغاء سجل الإنتاج للموديل: ${modelCode}${qtyText}؟`;
-  document.getElementById('cancelModal').style.display = 'flex';
-}
-function closeCancelModal() {
-  document.getElementById('cancelModal').style.display = 'none';
-}
-
-  // ─── Worker Self-Entry Calculations ─────────────────────────
-  window.handleWorkerStageChange = function() {
-    const stageSel = document.getElementById('id_worker_stage');
-    const stageId = stageSel ? stageSel.value : '';
-    const variantInput = document.getElementById('worker_variant_id');
-    const variantId = variantInput ? variantInput.value : '';
-    const hintEl = document.getElementById('worker_qty_hint');
-    const qtyInput = document.getElementById('id_worker_qty');
-
-    if (variantId && stageId) {
-      fetch(`/ajax/price-for-stage/?variant_id=${variantId}&stage_id=${stageId}`)
-        .then(r => r.json())
-        .then(data => {
-          const price = parseFloat(data.unit_price) || 0;
-          const planned = parseInt(data.planned_quantity) || 0;
-          const produced = parseInt(data.produced_quantity) || 0;
-          const remaining = parseInt(data.remaining_quantity) || 0;
-
-          const hiddenPrice = document.getElementById('id_worker_price_val');
-          if (hiddenPrice) hiddenPrice.value = price;
-          const displayPrice = document.getElementById('id_worker_unit_price');
-          if (displayPrice) displayPrice.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '—';
-
-          if (hintEl) {
-            hintEl.style.display = 'block';
-            if (remaining <= 0) {
-              hintEl.style.color = 'var(--color-danger)';
-              hintEl.style.borderColor = 'var(--color-danger)';
-              hintEl.innerHTML = `⚠️ <b>تم استكمال هذه المرحلة:</b> المخطط: ${planned} | المنفذ: ${produced} | <b>المتبقي: 0</b>`;
-            } else {
-              hintEl.style.color = 'var(--color-text)';
-              hintEl.style.borderColor = 'var(--color-border)';
-              hintEl.innerHTML = `📊 المخطط: <b>${planned}</b> | المنفذ: <b>${produced}</b> | <span style="color:var(--color-success);">المتبقي: <b>${remaining} قطعة</b></span>`;
-            }
-          }
-
-          if (qtyInput) {
-            qtyInput.dataset.remaining = remaining;
-            qtyInput.max = remaining;
-          }
-
-          calcWorkerTotal();
-        })
-        .catch(err => {
-          console.error("Price fetch error:", err);
-          calcWorkerTotal();
-        });
-    } else {
-      const hiddenPrice = document.getElementById('id_worker_price_val');
-      if (hiddenPrice) hiddenPrice.value = '0';
-      const displayPrice = document.getElementById('id_worker_unit_price');
-      if (displayPrice) displayPrice.textContent = '—';
-      if (hintEl) hintEl.style.display = 'none';
-      calcWorkerTotal();
-    }
-  };
-
-  window.calcWorkerTotal = function() {
-    const hiddenPrice = document.getElementById('id_worker_price_val');
-    const price = hiddenPrice ? (parseFloat(hiddenPrice.value) || 0) : 0;
-    const qtyInput = document.getElementById('id_worker_qty');
-    const qty = qtyInput ? (parseInt(qtyInput.value) || 0) : 0;
-    const remaining = qtyInput && qtyInput.dataset.remaining !== undefined ? parseInt(qtyInput.dataset.remaining) : null;
-    const warningEl = document.getElementById('worker_qty_warning');
-
-    if (warningEl && remaining !== null) {
-      if (qty > remaining) {
-        warningEl.style.display = 'block';
-        warningEl.textContent = `⚠️ الكمية المدخلة (${qty}) أكبر من المتبقي المخطط (${remaining} قطعة)!`;
-      } else {
-        warningEl.style.display = 'none';
-      }
-    }
-
-    const total = price * qty;
-    const totalDisplay = document.getElementById('id_worker_total_display');
-    if (totalDisplay) {
-      totalDisplay.textContent = total > 0 ? total.toFixed(2) + ' ج.م' : '—';
-    }
-  };
-
-  // Auto-trigger if worker has only 1 stage
+// ─── Initial Page Load Trigger ──────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+  // Worker self-entry initial trigger
   const workerStageSel = document.getElementById('id_worker_stage');
-  if (workerStageSel && (workerStageSel.options.length === 2 || workerStageSel.value)) {
+  if (workerStageSel) {
     if (!workerStageSel.value && workerStageSel.options.length === 2) {
       workerStageSel.selectedIndex = 1;
     }
-    handleWorkerStageChange();
+    if (workerStageSel.value) {
+      handleWorkerStageChange();
+    }
   }
-})();
+
+  // Staff mode QR initial trigger
+  const formEl = document.getElementById('productionForm');
+  if (formEl) {
+    const initClient = formEl.dataset.initialClient;
+    const initModel = formEl.dataset.initialModel;
+    const initVariant = formEl.dataset.initialVariant;
+
+    if (initClient && clientSel) {
+      clientSel.value = initClient;
+      fetch(`/ajax/models-by-client/?client_id=${initClient}`)
+        .then(r => r.json())
+        .then(data => {
+          const modelSel = document.getElementById('id_product_model');
+          if (!modelSel) return;
+          modelSel.innerHTML = '<option value="">اختر الموديل...</option>' +
+            data.models.map(m => `<option value="${m.id}" ${m.id == initModel ? 'selected' : ''}>${m.name}</option>`).join('');
+          modelSel.disabled = false;
+          if (initModel) {
+            selectedModelId = initModel;
+            fetch(`/ajax/variants-by-model/?model_id=${initModel}`)
+              .then(r => r.json())
+              .then(vData => {
+                const variantSel = document.getElementById('id_variant');
+                if (!variantSel) return;
+                variantSel.innerHTML = '<option value="">اختر نوع المنتج...</option>' +
+                  vData.variants.map(v => `<option value="${v.id}" ${v.id == initVariant ? 'selected' : ''}>${v.name}</option>`).join('');
+                variantSel.disabled = false;
+                if (initVariant) {
+                  variantSel.value = initVariant;
+                }
+              });
+          }
+        });
+    }
+  }
+});
 </script>
 {% endblock %}

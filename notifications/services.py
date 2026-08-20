@@ -355,6 +355,8 @@ def handle_start_command(profile: TelegramProfile, text: str, base_url: str) -> 
             v_id = param.split('_', 1)[1]
             if v_id.isdigit():
                 variant = ProductVariant.objects.select_related('product_model', 'color', 'size').filter(pk=int(v_id)).first()
+                if variant:
+                    model = variant.product_model
         elif param.startswith('m_'):
             m_id = param.split('_', 1)[1]
             if m_id.isdigit():
@@ -362,18 +364,31 @@ def handle_start_command(profile: TelegramProfile, text: str, base_url: str) -> 
 
         # If user is already authenticated worker
         if profile.is_authenticated and profile.entity_type == 'worker' and profile.entity_id:
-            worker = Worker.objects.filter(pk=profile.entity_id, is_active=True).first()
+            worker = Worker.objects.prefetch_related('stages').filter(pk=profile.entity_id, is_active=True).first()
             if worker:
+                # Skill / Stages restriction: Check if worker has stages for this model
+                if model:
+                    model_stage_ids = set(model.model_stages.filter(is_active=True).values_list('stage_id', flat=True))
+                    worker_stage_ids = set(worker.stages.filter(is_active=True).values_list('id', flat=True))
+                    if not model_stage_ids.intersection(worker_stage_ids):
+                        msg = (
+                            f"⚠️ عذراً يا <b>{worker.name}</b>\n\n"
+                            f"ليس لديك مراحل عمل مسندة في الموديل <b>{model.code} ({model.name})</b>.\n"
+                            f"المراحل المطلوبة لهذا الموديل لم تُسند لمهاراتك بعد. يرجى مراجعة المشرف لإسناد المراحل لك."
+                        )
+                        TelegramBot.send_message(profile.chat_id, msg, reply_markup=get_worker_keyboard())
+                        return {'status': 'worker_has_no_stages_for_model', 'worker_id': worker.pk}
+
                 token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
-                next_url = f"/production/entry/?variant={variant.pk}" if variant else (f"/production/entry/?model={model.pk}" if model else "/production/entry/")
-                login_url = f"{base_url.rstrip('/')}/workers/telegram-login/{token_obj.token}/?next={next_url}"
+                next_url = f"/entry/?variant={variant.pk}" if variant else (f"/entry/?model={model.pk}" if model else "/entry/")
+                login_url = f"{base_url.rstrip('/')}/workers/portal-login/{token_obj.token}/?next={next_url}"
 
                 item_desc = f"{variant.product_model.code} ({variant.color.name} / {variant.size.name})" if variant else (model.code if model else "الصنف المحدد")
                 msg = (
                     f"👷 مرحباً <b>{worker.name}</b>\n\n"
-                    f"📦 <b>مسح رمز الصنف:</b> {item_desc}\n\n"
+                    f"📦 <b>تم مسح رمز الصنف:</b> {item_desc}\n\n"
                     f"👉 <a href='{login_url}'>اضغط هنا لتسجيل إنتاجك لهذا الصنف</a>\n\n"
-                    f"⏱️ <i>الرابط صالح للاستخدام لمرة واحدة فقط لمدة ساعة.</i>"
+                    f"⏱️ <i>الرابط صالح للاستخدام لمرة واحدة ومؤمن.</i>"
                 )
                 TelegramBot.send_message(profile.chat_id, msg, reply_markup=get_worker_keyboard())
                 return {'status': 'qr_scan_entry_sent', 'worker_id': worker.pk}

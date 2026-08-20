@@ -53,53 +53,48 @@ def _require_worker_session(request):
         return None, redirect('accounts:login')
 
 
-def get_month_navigation_context(year=None, month=None):
-    """Build month navigation context dict."""
+def get_worker_period_context(period_param='this_month'):
+    """
+    Build period filter context strictly for:
+    - 'today': Today only
+    - 'this_month': Current month (default)
+    - 'last_month': Previous month
+    """
     today = date.today()
-    try:
-        y = int(year) if year else today.year
-        m = int(month) if month else today.month
-    except (ValueError, TypeError):
-        y, m = today.year, today.month
+    period = period_param or 'this_month'
 
-    if m < 1 or m > 12:
-        m = today.month
-
-    _, num_days = calendar.monthrange(y, m)
-    start_date = date(y, m, 1)
-    end_date = date(y, m, num_days)
-
-    if m == 1:
-        prev_year, prev_month = y - 1, 12
-    else:
-        prev_year, prev_month = y, m - 1
-
-    if m == 12:
-        next_year, next_month = y + 1, 1
-    else:
-        next_year, next_month = y, m + 1
-
-    if today.month == 1:
-        last_month_year, last_month_month = today.year - 1, 12
-    else:
-        last_month_year, last_month_month = today.year, today.month - 1
+    if period == 'today':
+        start_date = today
+        end_date = today
+        title = f'إنتاج اليوم ({today.strftime("%Y-%m-%d")})'
+        subtitle = 'اليوم'
+    elif period == 'last_month':
+        if today.month == 1:
+            lm_year, lm_month = today.year - 1, 12
+        else:
+            lm_year, lm_month = today.year, today.month - 1
+        _, num_days = calendar.monthrange(lm_year, lm_month)
+        start_date = date(lm_year, lm_month, 1)
+        end_date = date(lm_year, lm_month, num_days)
+        title = f'الشهر السابق ({ARABIC_MONTHS[lm_month]} {lm_year})'
+        subtitle = 'الشهر السابق'
+    else:  # this_month (default)
+        period = 'this_month'
+        _, num_days = calendar.monthrange(today.year, today.month)
+        start_date = date(today.year, today.month, 1)
+        end_date = date(today.year, today.month, num_days)
+        title = f'الشهر الحالي ({ARABIC_MONTHS[today.month]} {today.year})'
+        subtitle = 'الشهر الحالي'
 
     return {
-        'selected_year': y,
-        'selected_month': m,
-        'month_name': ARABIC_MONTHS[m],
+        'period': period,
         'start_date': start_date.isoformat(),
         'end_date': end_date.isoformat(),
-        'prev_year': prev_year,
-        'prev_month': prev_month,
-        'next_year': next_year,
-        'next_month': next_month,
-        'this_year': today.year,
-        'this_month': today.month,
-        'last_month_year': last_month_year,
-        'last_month_month': last_month_month,
-        'is_current_month': (y == today.year and m == today.month),
-        'is_last_month': (y == last_month_year and m == last_month_month),
+        'title': title,
+        'subtitle': subtitle,
+        'is_today': (period == 'today'),
+        'is_this_month': (period == 'this_month'),
+        'is_last_month': (period == 'last_month'),
     }
 
 
@@ -126,7 +121,7 @@ def _build_production_groups(entries):
 class ExternalWorkerDashboardView(View):
     """
     Worker-only dashboard accessible via Telegram magic-link.
-    Shows production data with month navigation, grouped by model/color/size/stage.
+    Shows production data strictly for Today, This Month, or Last Month.
     """
     template_name = 'external/worker_dashboard.html'
 
@@ -135,13 +130,26 @@ class ExternalWorkerDashboardView(View):
         if error_redirect:
             return error_redirect
 
-        # Month navigation
-        month_ctx = get_month_navigation_context(
-            request.GET.get('year'),
-            request.GET.get('month')
-        )
-        start_date = month_ctx['start_date']
-        end_date = month_ctx['end_date']
+        # Period filtering: today, this_month, last_month
+        period_param = request.GET.get('period')
+        if not period_param:
+            if request.GET.get('year') or request.GET.get('month'):
+                try:
+                    y = int(request.GET.get('year'))
+                    m = int(request.GET.get('month'))
+                    today = date.today()
+                    if y == today.year and m == today.month:
+                        period_param = 'this_month'
+                    else:
+                        period_param = 'last_month'
+                except (ValueError, TypeError):
+                    period_param = 'this_month'
+            else:
+                period_param = 'this_month'
+
+        period_ctx = get_worker_period_context(period_param)
+        start_date = period_ctx['start_date']
+        end_date = period_ctx['end_date']
 
         summary = get_worker_earnings(worker, start_date, end_date)
         history = list(
@@ -224,7 +232,7 @@ class ExternalWorkerDashboardView(View):
             'page_obj': page,
             'production_groups': production_groups,
             'model_names': model_names,
-            'month_ctx': month_ctx,
+            'period_ctx': period_ctx,
             'start_date': start_date,
             'end_date': end_date,
         })

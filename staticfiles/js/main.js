@@ -133,6 +133,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================
 function initProductionEntry() {
   const formEl      = document.getElementById('productionForm');
+  if (!formEl || document.getElementById('worker_search_input') || document.getElementById('workerProductionForm')) {
+    return;
+  }
   const selClient   = document.getElementById('id_client');
   const selModel    = document.getElementById('id_product_model');
   const selVariant  = document.getElementById('id_variant');

@@ -2,6 +2,7 @@ from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.urls import reverse
 from decimal import Decimal
+from django.utils import timezone
 from catalog.models import Client as FactoryClient, ProductModel, Color, Size, ProductionStage, ProductModelStage, ProductVariant
 from catalog.services import generate_variants
 from workers.models import Worker
@@ -248,5 +249,55 @@ class FactoryAppTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'تتجاوز الكمية المخططة المتبقية')
         self.assertEqual(ProductionEntry.objects.count(), 0)
+
+    def test_worker_entry_locks_production_date_to_today(self):
+        self.client_app.logout()
+        session = self.client_app.session
+        session['external_auth'] = {'type': 'worker', 'entity_id': self.worker.pk}
+        session.save()
+
+        entry_url = reverse('production:entry')
+        post_data = {
+            'variant': self.variant.pk,
+            'stage': self.stage.pk,
+            'quantity': 15,
+            'production_date': '2020-01-01', # Attempting to backdate
+        }
+        resp = self.client_app.post(entry_url, post_data, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        entry = ProductionEntry.objects.first()
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry.production_date, timezone.localdate())
+
+    def test_worker_sees_only_own_history_for_current_model(self):
+        # Create other worker and entry
+        other_worker = Worker.objects.create(name='Other Worker', is_active=True)
+        other_worker.stages.add(self.stage)
+        create_production_entry(
+            variant_id=self.variant.pk,
+            stage_id=self.stage.pk,
+            worker_id=other_worker.pk,
+            quantity=10,
+            production_date=timezone.localdate().isoformat()
+        )
+        # Create logged worker entry
+        my_entry = create_production_entry(
+            variant_id=self.variant.pk,
+            stage_id=self.stage.pk,
+            worker_id=self.worker.pk,
+            quantity=5,
+            production_date=timezone.localdate().isoformat()
+        )
+
+        self.client_app.logout()
+        session = self.client_app.session
+        session['external_auth'] = {'type': 'worker', 'entity_id': self.worker.pk}
+        session.save()
+
+        resp = self.client_app.get(f"{reverse('production:entry')}?variant={self.variant.pk}")
+        self.assertEqual(resp.status_code, 200)
+        recent_entries = resp.context['recent']
+        self.assertEqual(len(recent_entries), 1)
+        self.assertEqual(recent_entries[0].pk, my_entry.pk)
 
 
