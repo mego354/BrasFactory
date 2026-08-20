@@ -76,6 +76,10 @@ class MagicLoginView(View):
 
         messages.success(request, f'أهلاً بك يا {token_obj.name}! تم تسجيل دخولك بنجاح.')
 
+        next_url = request.GET.get('next')
+        if next_url and next_url.startswith('/'):
+            return redirect(next_url)
+
         if token_obj.entity_type == 'worker':
             return redirect('external:worker_dashboard')
         else:

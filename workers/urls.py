@@ -11,5 +11,6 @@ urlpatterns = [
     path('<int:pk>/toggle/', views.worker_toggle, name='toggle'),
     path('<int:pk>/telegram-link/', views.GenerateWorkerTelegramLinkView.as_view(), name='telegram_link'),
     path('portal-login/<str:token>/', views.WorkerTelegramDirectLoginView.as_view(), name='telegram_direct_login'),
+    path('telegram-login/<str:token>/', views.WorkerTelegramDirectLoginView.as_view(), name='telegram_login_alias'),
 ]
 

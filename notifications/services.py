@@ -32,11 +32,14 @@ ARABIC_MONTHS = [
 
 
 def normalize_phone(phone: str) -> str:
-    """Normalizes phone numbers for consistent matching."""
-    import re
+    """Normalizes phone numbers converting Arabic digits and removing country codes."""
     if not phone:
         return ''
-    cleaned = re.sub(r'[^\d+]', '', str(phone).strip())
+    # Convert Arabic numerals to ASCII digits
+    arabic_trans = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
+    phone = str(phone).translate(arabic_trans)
+    import re
+    cleaned = re.sub(r'[^\d+]', '', phone.strip())
     if cleaned.startswith('+20'):
         cleaned = '0' + cleaned[3:]
     elif cleaned.startswith('0020'):
@@ -48,17 +51,47 @@ def normalize_phone(phone: str) -> str:
 
 def find_worker_by_phone(phone: str):
     """
-    Finds matching active Worker by phone number.
-    Returns Worker instance or None.
+    Finds matching active Worker by phone number with robust matching
+    supporting various formats (010..., +20..., spaces, dashes, etc.).
     """
-    clean_p = normalize_phone(phone)
-    if not clean_p:
+    if not phone:
         return None
 
-    w = Worker.objects.filter(is_active=True).filter(phone__icontains=clean_p).first()
-    if not w and len(clean_p) > 9:
-        w = Worker.objects.filter(is_active=True).filter(phone__endswith=clean_p[-9:]).first()
-    return w
+    import re
+    arabic_trans = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
+    raw_str = str(phone).translate(arabic_trans)
+    digits = re.sub(r'\D', '', raw_str)
+    if not digits:
+        return None
+
+    # 1. Clean Egyptian local format (e.g. 01012345678)
+    clean_p = normalize_phone(phone)
+
+    # 2. Extract core suffix (last 8-9 digits)
+    core_suffix = digits[-8:] if len(digits) >= 8 else digits
+
+    # Try direct database filters
+    w = Worker.objects.filter(is_active=True).filter(phone__icontains=core_suffix).first()
+    if w:
+        return w
+
+    if clean_p:
+        w = Worker.objects.filter(is_active=True).filter(phone__icontains=clean_p).first()
+        if w:
+            return w
+
+    # 3. Comprehensive scan over active workers comparing normalized digits
+    for worker in Worker.objects.filter(is_active=True):
+        if not worker.phone:
+            continue
+        w_raw = str(worker.phone).translate(arabic_trans)
+        w_digits = re.sub(r'\D', '', w_raw)
+        if not w_digits:
+            continue
+        if w_digits == digits or w_digits.endswith(core_suffix) or digits.endswith(w_digits[-8:] if len(w_digits) >= 8 else w_digits):
+            return worker
+
+    return None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -304,7 +337,40 @@ def handle_contact_login(profile: TelegramProfile, phone: str, base_url: str) ->
 
 
 def handle_start_command(profile: TelegramProfile, text: str, base_url: str) -> dict:
-    """Handles /start command with auto-routing."""
+    """Handles /start command with auto-routing and deep-link parameters."""
+    parts = text.strip().split(maxsplit=1)
+    param = parts[1].strip() if len(parts) > 1 else ''
+
+    if param:
+        # Check if param is w_<id> or worker_<id> or integer pk or phone
+        worker = None
+        if param.startswith('w_') or param.startswith('worker_'):
+            w_id = param.split('_', 1)[1]
+            if w_id.isdigit():
+                worker = Worker.objects.filter(pk=int(w_id), is_active=True).first()
+        elif param.isdigit():
+            if len(param) <= 6:
+                worker = Worker.objects.filter(pk=int(param), is_active=True).first()
+            else:
+                worker = find_worker_by_phone(param)
+        else:
+            worker = find_worker_by_phone(param)
+
+        if worker:
+            profile.phone = normalize_phone(worker.phone) if worker.phone else ''
+            profile.entity_type = 'worker'
+            profile.entity_id = worker.pk
+            profile.is_authenticated = True
+            profile.save()
+
+            welcome_msg = (
+                f"✅ <b>تم الربط والتحقق بنجاح!</b>\n\n"
+                f"مرحباً بك يا <b>{worker.name}</b> (عامل إنتاج).\n"
+                f"يمكنك الآن استخدام القائمة أدناه لمتابعة إنتاجك أو الدخول لتسجيل إنتاج جديد."
+            )
+            TelegramBot.send_message(profile.chat_id, welcome_msg, reply_markup=get_worker_keyboard())
+            return {'status': 'authenticated_via_start_param', 'worker_id': worker.pk}
+
     if profile.is_authenticated and profile.entity_id:
         if profile.entity_type == 'worker':
             w = Worker.objects.filter(pk=profile.entity_id, is_active=True).first()
