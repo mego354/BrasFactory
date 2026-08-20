@@ -338,9 +338,11 @@ class ProductionEntryView(View):
                 )
                 return redirect('external:worker_dashboard')
             except ProductionValidationError as e:
-                messages.error(request, str(e))
+                messages.error(request, f'❌ {e}')
+            except ValueError as e:
+                messages.error(request, f'❌ خطأ في البيانات: {e}')
             except Exception as e:
-                messages.error(request, f'خطأ: {e}')
+                messages.error(request, f'❌ خطأ: {e}')
             return redirect(request.get_full_path())
 
         # Staff submission
@@ -370,9 +372,10 @@ class ProductionEntryView(View):
                 )
                 return redirect('production:entry')
             except ProductionValidationError as e:
-                messages.error(request, str(e))
+                messages.error(request, f'❌ {e}')
+                form.add_error('quantity', str(e))
             except Exception as e:
-                messages.error(request, f'خطأ غير متوقع: {e}')
+                messages.error(request, f'❌ خطأ غير متوقع: {e}')
 
         today_date = timezone.localdate().isoformat()
         return render(request, self.template_name, {
@@ -383,18 +386,39 @@ class ProductionEntryView(View):
 # ─────────────────────────────────────────────
 # Cancel Entry
 # ─────────────────────────────────────────────
-@method_decorator(login_required, name='dispatch')
 class CancelEntryView(View):
     def post(self, request, pk):
         entry = get_object_or_404(ProductionEntry, pk=pk)
-        if not request.user.is_staff:
-            messages.error(request, 'فقط المشرفون يمكنهم إلغاء سجلات الإنتاج.')
-            return redirect('production:entry')
+
+        # Check authorization: Django user OR Worker session
+        worker_auth = request.session.get('external_auth')
+        is_worker = bool(worker_auth and worker_auth.get('type') == 'worker')
+        logged_worker = None
+        if is_worker:
+            logged_worker = Worker.objects.filter(pk=worker_auth.get('entity_id'), is_active=True).first()
+
+        if not request.user.is_authenticated and not logged_worker:
+            messages.error(request, 'يجب تسجيل الدخول أولاً لإلغاء السجل.')
+            return redirect('accounts:login')
+
+        if logged_worker and not request.user.is_authenticated:
+            if entry.worker_id != logged_worker.pk:
+                messages.error(request, 'غير مصرح لك بإلغاء سجل إنتاج يخص عاملاً آخر.')
+                return redirect(request.META.get('HTTP_REFERER', 'production:entry'))
+            reason = f'تم الإلغاء بواسطة العامل ({logged_worker.name})'
+            user_obj = None
+        else:
+            reason = request.POST.get('reason') or f'تم الإلغاء بواسطة المشرف ({request.user.username})'
+            user_obj = request.user
+
         try:
-            cancel_production_entry(entry, 'تم الإلغاء بواسطة المشرف', request.user)
-            messages.success(request, 'تم إلغاء سجل الإنتاج بنجاح.')
+            cancel_production_entry(entry, reason, user_obj)
+            messages.success(request, f'✅ تم إلغاء سجل الإنتاج بنجاح (الموديل: {entry.variant.product_model.code} - الكمية: {entry.quantity}).')
         except ProductionValidationError as e:
             messages.error(request, str(e))
+        except Exception as e:
+            messages.error(request, f'خطأ أثناء الإلغاء: {e}')
+
         return redirect(request.META.get('HTTP_REFERER', 'production:entry'))
 
 
@@ -465,17 +489,31 @@ def ajax_price_for_stage(request):
     variant_id = request.GET.get('variant_id')
     stage_id = request.GET.get('stage_id')
     if not variant_id or not stage_id:
-        return JsonResponse({'unit_price': 0})
+        return JsonResponse({'unit_price': 0, 'planned_quantity': 0, 'produced_quantity': 0, 'remaining_quantity': 0})
     try:
-        variant = ProductVariant.objects.select_related('product_model').get(pk=variant_id)
+        variant = ProductVariant.objects.select_related('product_model', 'color', 'size').get(pk=variant_id)
         ms = ProductModelStage.objects.get(
             product_model=variant.product_model,
             stage_id=stage_id,
             is_active=True
         )
-        return JsonResponse({'unit_price': str(ms.unit_price)})
+        produced_qty = ProductionEntry.objects.filter(
+            variant=variant,
+            stage_id=stage_id,
+            is_cancelled=False
+        ).aggregate(total=Sum('quantity'))['total'] or 0
+
+        planned_qty = variant.planned_quantity
+        remaining_qty = max(0, planned_qty - produced_qty)
+
+        return JsonResponse({
+            'unit_price': str(ms.unit_price),
+            'planned_quantity': planned_qty,
+            'produced_quantity': produced_qty,
+            'remaining_quantity': remaining_qty,
+        })
     except (ProductVariant.DoesNotExist, ProductModelStage.DoesNotExist):
-        return JsonResponse({'unit_price': 0})
+        return JsonResponse({'unit_price': 0, 'planned_quantity': 0, 'produced_quantity': 0, 'remaining_quantity': 0})
 
 
 @login_required

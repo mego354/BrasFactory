@@ -204,6 +204,7 @@
               <th>المرحلة</th>
               <th>الكمية</th>
               <th>العامل</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -218,6 +219,14 @@
               <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
               <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
               <td style="font-size:0.82rem;">{{ entry.worker.name }}</td>
+              <td>
+                {% if request.user.is_authenticated %}
+                <form method="post" action="{% url 'production:cancel_entry' entry.pk %}" style="display:inline;" onsubmit="return confirm('هل أنت متأكد من رغبتك في إلغاء سجل الإنتاج هذا؟');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-danger" style="font-size:0.72rem;padding:0.15rem 0.45rem;">إلغاء</button>
+                </form>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>

@@ -21,10 +21,10 @@ class ProductionValidationError(Exception):
     pass
 
 
-def validate_entry(variant: ProductVariant, stage_id: int, worker: Worker) -> dict:
+def validate_entry(variant: ProductVariant, stage_id: int, worker: Worker, quantity: int = 0) -> dict:
     """
     Validate a proposed production entry.
-    Returns {'price': Decimal, 'warnings': [str]}
+    Returns {'price': Decimal, 'planned': int, 'produced': int, 'remaining': int, 'warnings': [str]}
     Raises ProductionValidationError on hard rule violations.
     """
     # Rule 2: Stage must belong to this product model
@@ -45,7 +45,35 @@ def validate_entry(variant: ProductVariant, stage_id: int, worker: Worker) -> di
             f'العامل "{worker.name}" غير مسند لمرحلة "{model_stage.stage.name}".'
         )
 
-    return {'price': model_stage.unit_price, 'warnings': []}
+    # Rule 3: Strict planned quantity check (cannot exceed planned quantity)
+    already_produced = ProductionEntry.objects.filter(
+        variant=variant,
+        stage_id=stage_id,
+        is_cancelled=False
+    ).aggregate(total=Sum('quantity'))['total'] or 0
+
+    planned = variant.planned_quantity
+    remaining = max(0, planned - already_produced)
+
+    if planned <= 0:
+        raise ProductionValidationError(
+            f'لا يمكن تسجيل الإنتاج: لم يتم تحديد كمية مخططة لهذا النوع "{variant.display_name}" (الكمية المخططة = 0). يرجى ضبط الكمية المخططة أولاً.'
+        )
+
+    if quantity > 0 and (already_produced + quantity > planned):
+        raise ProductionValidationError(
+            f'لا يمكن تسجيل الإنتاج: الكمية المطلوبة ({quantity}) تتجاوز الكمية المخططة المتبقية ({remaining} قطعة) '
+            f'لهذا النوع "{variant.display_name}" في مرحلة "{model_stage.stage.name}". '
+            f'(المنفذ سابقاً: {already_produced} / المخطط: {planned}).'
+        )
+
+    return {
+        'price': model_stage.unit_price,
+        'planned': planned,
+        'produced': already_produced,
+        'remaining': remaining,
+        'warnings': []
+    }
 
 
 @transaction.atomic
@@ -64,10 +92,13 @@ def create_production_entry(
     Validates all rules before saving.
     Snapshots the unit price at creation time.
     """
-    variant = ProductVariant.objects.select_related('product_model').get(pk=variant_id)
+    if quantity <= 0:
+        raise ProductionValidationError('الكمية المنتجة يجب أن تكون أكبر من صفر.')
+
+    variant = ProductVariant.objects.select_related('product_model', 'color', 'size').get(pk=variant_id)
     worker = Worker.objects.get(pk=worker_id)
 
-    validation = validate_entry(variant, stage_id, worker)
+    validation = validate_entry(variant, stage_id, worker, quantity=quantity)
     price = validation['price']
     total = price * quantity
 
@@ -87,13 +118,13 @@ def create_production_entry(
 
 
 @transaction.atomic
-def cancel_production_entry(entry: ProductionEntry, reason: str, user) -> ProductionEntry:
+def cancel_production_entry(entry: ProductionEntry, reason: str, user=None) -> ProductionEntry:
     """Soft-cancel a production entry. Never deletes."""
     if entry.is_cancelled:
         raise ProductionValidationError('هذا السجل مُلغى بالفعل.')
     entry.is_cancelled = True
     entry.cancellation_reason = reason
-    entry.cancelled_by = user
+    entry.cancelled_by = user if (user and getattr(user, 'is_authenticated', False)) else None
     entry.cancelled_at = timezone.now()
     entry.save()
     return entry

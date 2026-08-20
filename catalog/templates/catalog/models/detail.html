@@ -78,7 +78,7 @@
       <div class="table-container">
         <table class="table">
           <thead>
-            <tr><th>التاريخ</th><th>النوع</th><th>المرحلة</th><th>العامل</th><th>الكمية</th><th>الإجمالي</th></tr>
+            <tr><th>التاريخ</th><th>النوع</th><th>المرحلة</th><th>العامل</th><th>الكمية</th><th>الإجمالي</th><th></th></tr>
           </thead>
           <tbody>
             {% for entry in recent_entries %}
@@ -89,6 +89,14 @@
               <td style="font-size:0.85rem;">{{ entry.worker.name }}</td>
               <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
               <td style="font-weight:700;font-size:0.82rem;color:var(--color-success);">{{ entry.total_amount|currency_egp }}</td>
+              <td>
+                {% if request.user.is_authenticated %}
+                <form method="post" action="{% url 'production:cancel_entry' entry.pk %}" style="display:inline;" onsubmit="return confirm('هل أنت متأكد من رغبتك في إلغاء سجل الإنتاج هذا؟');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-danger" style="font-size:0.75rem;padding:0.2rem 0.5rem;">إلغاء</button>
+                </form>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>

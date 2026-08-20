@@ -50,6 +50,7 @@
           {% endif %}
           {% endfor %}
         </select>
+        <div id="worker_qty_hint" style="display:none;margin-top:0.4rem;padding:0.4rem 0.6rem;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:var(--radius-sm);font-size:0.82rem;"></div>
       </div>
 
       <!-- Quantity -->
@@ -58,6 +59,7 @@
         <input type="number" name="quantity" id="id_worker_qty" class="form-control"
                min="1" placeholder="أدخل عدد القطع..." required inputmode="numeric"
                onwheel="this.blur()" oninput="calcWorkerTotal()">
+        <div id="worker_qty_warning" style="display:none;color:var(--color-danger);font-size:0.82rem;margin-top:0.35rem;font-weight:700;"></div>
       </div>
 
       <!-- Live Calculation Display -->
@@ -166,6 +168,7 @@
         <div id="stage_hint" style="font-size:0.78rem;color:var(--color-text-muted);margin-top:0.25rem;display:none;">
           المراحل المعروضة هي التي يمتلكها العامل ومُهيأة لهذا الموديل
         </div>
+        <div id="staff_qty_hint" style="display:none;margin-top:0.4rem;padding:0.45rem 0.75rem;background:var(--color-surface-2);border:1.5px solid var(--color-border);border-radius:var(--radius-sm);font-size:0.85rem;font-weight:600;"></div>
         {% if form.stage.errors %}
         <div class="invalid-feedback" style="display:block;">{{ form.stage.errors.0 }}</div>
         {% endif %}
@@ -178,6 +181,7 @@
                min="1" placeholder="0" required inputmode="numeric"
                onwheel="this.blur()"
                value="{{ form.quantity.value|default:'' }}">
+        <div id="staff_qty_warning" style="display:none;color:var(--color-danger);font-size:0.82rem;margin-top:0.35rem;font-weight:700;"></div>
         {% if form.quantity.errors %}
         <div class="invalid-feedback" style="display:block;">{{ form.quantity.errors.0 }}</div>
         {% endif %}
@@ -265,8 +269,8 @@
             <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
             <td style="font-weight:800;font-size:0.85rem;color:var(--color-success);">{{ entry.total_amount|currency_egp }}</td>
             <td>
-              {% if request.user.is_staff %}
-              <button onclick="showCancelModal({{ entry.pk }}, '{{ entry.variant.product_model.code }}')"
+              {% if request.user.is_authenticated or logged_worker and entry.worker_id == logged_worker.pk %}
+              <button type="button" onclick="showCancelModal({{ entry.pk }}, '{{ entry.variant.product_model.code }}', {{ entry.quantity }})"
                       class="btn btn-sm btn-danger">إلغاء</button>
               {% endif %}
             </td>
@@ -514,10 +518,35 @@ function fetchPrice(variantId, stageId) {
     .then(r => r.json())
     .then(data => {
       const price = parseFloat(data.unit_price) || 0;
+      const planned = parseInt(data.planned_quantity) || 0;
+      const produced = parseInt(data.produced_quantity) || 0;
+      const remaining = parseInt(data.remaining_quantity) || 0;
+
       const hiddenPrice = document.getElementById('id_unit_price_hidden');
       if (hiddenPrice) hiddenPrice.value = price;
       const displayPrice = document.getElementById('id_unit_price_display');
       if (displayPrice) displayPrice.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '—';
+
+      const hintEl = document.getElementById('staff_qty_hint');
+      const qtyInput = document.getElementById('id_quantity');
+
+      if (hintEl) {
+        hintEl.style.display = 'block';
+        if (remaining <= 0) {
+          hintEl.style.color = 'var(--color-danger)';
+          hintEl.style.borderColor = 'var(--color-danger)';
+          hintEl.innerHTML = `⚠️ <b>تم استكمال المرحلة بالكامل:</b> المخطط: ${planned} | المنفذ: ${produced} | <b>المتبقي: 0 قطعة</b>`;
+        } else {
+          hintEl.style.color = 'var(--color-text)';
+          hintEl.style.borderColor = 'var(--color-border)';
+          hintEl.innerHTML = `📊 <b>خطة الإنتاج للمرحلة:</b> المخطط: <b>${planned}</b> | المنفذ: <b>${produced}</b> | <span style="color:var(--color-success);">المتبقي: <b>${remaining} قطعة</b></span>`;
+        }
+      }
+
+      if (qtyInput) {
+        qtyInput.dataset.remaining = remaining;
+        qtyInput.max = remaining;
+      }
       updateTotal();
     });
 }
@@ -527,6 +556,18 @@ function updateTotal() {
   const price = hiddenPrice ? (parseFloat(hiddenPrice.value) || 0) : 0;
   const qtyInput = document.getElementById('id_quantity');
   const qty = qtyInput ? (parseInt(qtyInput.value) || 0) : 0;
+  const remaining = qtyInput && qtyInput.dataset.remaining !== undefined ? parseInt(qtyInput.dataset.remaining) : null;
+  const warningEl = document.getElementById('staff_qty_warning');
+
+  if (warningEl && remaining !== null) {
+    if (qty > remaining) {
+      warningEl.style.display = 'block';
+      warningEl.textContent = `⚠️ الكمية المطلوبة (${qty}) تتجاوز الكمية المتبقية المخططة (${remaining} قطعة)!`;
+    } else {
+      warningEl.style.display = 'none';
+    }
+  }
+
   const total = price * qty;
   const totalDisplay = document.getElementById('id_total_display');
   if (totalDisplay) {
@@ -535,9 +576,10 @@ function updateTotal() {
 }
 
 // ─── Cancel Modal ──────────────────────────────────────────────
-function showCancelModal(entryId, modelCode) {
+function showCancelModal(entryId, modelCode, quantity) {
   document.getElementById('cancelForm').action = `/entry/${entryId}/cancel/`;
-  document.getElementById('cancelModalDesc').textContent = `هل أنت متأكد من إلغاء سجل الإنتاج للموديل: ${modelCode}؟`;
+  const qtyText = quantity ? ` بكمية (${quantity} قطعة)` : '';
+  document.getElementById('cancelModalDesc').textContent = `هل أنت متأكد من إلغاء سجل الإنتاج للموديل: ${modelCode}${qtyText}؟`;
   document.getElementById('cancelModal').style.display = 'flex';
 }
 function closeCancelModal() {
@@ -550,16 +592,41 @@ function closeCancelModal() {
     const stageId = stageSel ? stageSel.value : '';
     const variantInput = document.getElementById('worker_variant_id');
     const variantId = variantInput ? variantInput.value : '';
-    
+    const hintEl = document.getElementById('worker_qty_hint');
+    const qtyInput = document.getElementById('id_worker_qty');
+
     if (variantId && stageId) {
       fetch(`/ajax/price-for-stage/?variant_id=${variantId}&stage_id=${stageId}`)
         .then(r => r.json())
         .then(data => {
           const price = parseFloat(data.unit_price) || 0;
+          const planned = parseInt(data.planned_quantity) || 0;
+          const produced = parseInt(data.produced_quantity) || 0;
+          const remaining = parseInt(data.remaining_quantity) || 0;
+
           const hiddenPrice = document.getElementById('id_worker_price_val');
           if (hiddenPrice) hiddenPrice.value = price;
           const displayPrice = document.getElementById('id_worker_unit_price');
           if (displayPrice) displayPrice.textContent = price > 0 ? price.toFixed(2) + ' ج.م' : '—';
+
+          if (hintEl) {
+            hintEl.style.display = 'block';
+            if (remaining <= 0) {
+              hintEl.style.color = 'var(--color-danger)';
+              hintEl.style.borderColor = 'var(--color-danger)';
+              hintEl.innerHTML = `⚠️ <b>تم استكمال هذه المرحلة:</b> المخطط: ${planned} | المنفذ: ${produced} | <b>المتبقي: 0</b>`;
+            } else {
+              hintEl.style.color = 'var(--color-text)';
+              hintEl.style.borderColor = 'var(--color-border)';
+              hintEl.innerHTML = `📊 المخطط: <b>${planned}</b> | المنفذ: <b>${produced}</b> | <span style="color:var(--color-success);">المتبقي: <b>${remaining} قطعة</b></span>`;
+            }
+          }
+
+          if (qtyInput) {
+            qtyInput.dataset.remaining = remaining;
+            qtyInput.max = remaining;
+          }
+
           calcWorkerTotal();
         })
         .catch(err => {
@@ -571,6 +638,7 @@ function closeCancelModal() {
       if (hiddenPrice) hiddenPrice.value = '0';
       const displayPrice = document.getElementById('id_worker_unit_price');
       if (displayPrice) displayPrice.textContent = '—';
+      if (hintEl) hintEl.style.display = 'none';
       calcWorkerTotal();
     }
   };
@@ -580,6 +648,18 @@ function closeCancelModal() {
     const price = hiddenPrice ? (parseFloat(hiddenPrice.value) || 0) : 0;
     const qtyInput = document.getElementById('id_worker_qty');
     const qty = qtyInput ? (parseInt(qtyInput.value) || 0) : 0;
+    const remaining = qtyInput && qtyInput.dataset.remaining !== undefined ? parseInt(qtyInput.dataset.remaining) : null;
+    const warningEl = document.getElementById('worker_qty_warning');
+
+    if (warningEl && remaining !== null) {
+      if (qty > remaining) {
+        warningEl.style.display = 'block';
+        warningEl.textContent = `⚠️ الكمية المدخلة (${qty}) أكبر من المتبقي المخطط (${remaining} قطعة)!`;
+      } else {
+        warningEl.style.display = 'none';
+      }
+    }
+
     const total = price * qty;
     const totalDisplay = document.getElementById('id_worker_total_display');
     if (totalDisplay) {
@@ -589,8 +669,10 @@ function closeCancelModal() {
 
   // Auto-trigger if worker has only 1 stage
   const workerStageSel = document.getElementById('id_worker_stage');
-  if (workerStageSel && workerStageSel.options.length === 2) {
-    workerStageSel.selectedIndex = 1;
+  if (workerStageSel && (workerStageSel.options.length === 2 || workerStageSel.value)) {
+    if (!workerStageSel.value && workerStageSel.options.length === 2) {
+      workerStageSel.selectedIndex = 1;
+    }
     handleWorkerStageChange();
   }
 })();
