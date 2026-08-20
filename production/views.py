@@ -104,7 +104,7 @@ class DashboardView(View):
 
         if request.GET.get('export') == 'pdf':
             pdf = FactoryPDFReport(
-                title='تقرير متابعة وسجل الإنتاج العام للمصنع (مرتب ومبوب)',
+                title='تقرير متابعة وسجل الإنتاج العام للمصنع',
                 subtitle=f'الفترة من {start_date} إلى {end_date}'
             )
             base_url = request.build_absolute_uri('/')
@@ -119,12 +119,11 @@ class DashboardView(View):
                 ('العمال النشطون', f"{active_workers:,} عامل"),
             ])
 
-            # 1. Model Progress Table (Sorted by overall progress pct descending)
+            # Model Progress Table with Register QR codes
             if model_progress:
-                sorted_models = sorted(model_progress, key=lambda x: x.get('overall_pct', 0), reverse=True)
-                pdf.add_section_title('موقف إنتاج الموديلات الحالية وأكواد QR للتسجيل (مرتب حسب نسبة الإنجاز)')
+                pdf.add_section_title('موقف إنتاج الموديلات الحالية وأكواد QR للتسجيل')
                 m_rows = []
-                for mp in sorted_models:
+                for mp in model_progress:
                     pm_obj = mp['model']
                     qr_img = generate_qr_image_flowable(build_model_entry_url(pm_obj, base_url), size=28)
                     m_rows.append([
@@ -141,55 +140,14 @@ class DashboardView(View):
                     right_align_cols=[1]
                 )
 
-            # 2. Stage Breakdown Table (Sorted by total quantity descending)
-            stage_stats = entries_qs.values('stage__name').annotate(
-                total_qty=Sum('quantity'), total_amount=Sum('total_amount')
-            ).order_by('-total_qty')
-            if stage_stats.exists():
-                pdf.add_section_title('ملخص الإنتاج وتكلفة التشغيل حسب مراحل الإنتاج (مرتب حسب الكمية)')
-                stage_rows = []
-                for s in stage_stats:
-                    stage_rows.append([
-                        s['stage__name'],
-                        f"{s['total_qty']:,} قطعة",
-                        f"{s['total_amount']:,.2f} ج.م",
-                    ])
-                pdf.add_table(
-                    headers=['مرحلة الإنتاج', 'إجمالي الكمية المنجزة', 'إجمالي القيمة / التكلفة'],
-                    rows=stage_rows,
-                    col_widths=[220, 155, 160],
-                    right_align_cols=[0]
-                )
-
-            # 3. Top Workers Breakdown Table (Sorted by total earnings descending)
-            worker_stats = entries_qs.values('worker__name').annotate(
-                total_qty=Sum('quantity'), total_amount=Sum('total_amount'), count=Count('id')
-            ).order_by('-total_amount')
-            if worker_stats.exists():
-                pdf.add_section_title('ملخص إنتاج ومستحقات العمال (مرتب حسب الأعلى استحقاقاً)')
-                w_rows = []
-                for rank, w in enumerate(worker_stats[:20], 1):
-                    w_rows.append([
-                        f"{rank}. {w['worker__name']}",
-                        f"{w['total_qty']:,} قطعة",
-                        f"{w['total_amount']:,.2f} ج.م",
-                        f"{w['count']} سجل",
-                    ])
-                pdf.add_table(
-                    headers=['العامل', 'الكمية المنتجة', 'إجمالي المستحقات', 'عدد السجلات'],
-                    rows=w_rows,
-                    col_widths=[195, 115, 125, 100],
-                    right_align_cols=[0]
-                )
-
-            # 4. Recent Production Entries (Sorted by -production_date, model, stage)
+            # Recent Production Entries with Variant Register QR codes
             recent_entries_full = entries_qs.select_related(
                 'variant__product_model__client', 'variant__color', 'variant__size',
                 'stage', 'worker'
-            ).order_by('-production_date', 'variant__product_model__code', 'stage__name')[:35]
+            ).order_by('-production_date', '-created_at')[:35]
 
             if recent_entries_full:
-                pdf.add_section_title('سجلات الإنتاج التفصيلية الأخيرة (مرتبة حسب التاريخ والموديل)')
+                pdf.add_section_title('سجلات الإنتاج التفصيلية مع أكواد QR للأنواع (Variants)')
                 entry_rows = []
                 for e in recent_entries_full:
                     v_qr = generate_qr_image_flowable(build_variant_entry_url(e.variant, base_url), size=26)

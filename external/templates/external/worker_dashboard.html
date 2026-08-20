@@ -1,0 +1,238 @@
+{% load static factory_tags %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة إنتاج العامل | {{ worker.name }} - مصنع الوردة الحمراء</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="{% static 'css/main.css' %}">
+  <style>
+    body { background: #f8fafc; font-family: 'Cairo', sans-serif; }
+    .ext-header {
+      background: linear-gradient(135deg, #1e1033 0%, #2d1a56 60%, #4a1d6d 100%);
+      color: white;
+      padding: 1.25rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.12);
+    }
+    .month-nav-box {
+      background: white;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 0.875rem 1.25rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .model-group-card {
+      background: white;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 14px;
+      margin-bottom: 1.25rem;
+      overflow: hidden;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+    }
+    .model-group-header {
+      background: #f1f5f9;
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .variant-item {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px dashed #e2e8f0;
+    }
+    .variant-item:last-child {
+      border-bottom: none;
+    }
+    .stage-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 0.35rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.88rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="ext-header">
+    <div>
+      <div style="font-size:0.78rem;opacity:0.8;font-weight:600;">🌹 مصنع الوردة الحمراء للملابس الجاهزة</div>
+      <div style="font-weight:800;font-size:1.2rem;">مرحباً، {{ worker.name }}</div>
+    </div>
+    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+      <a href="{% url 'production:entry' %}" class="btn btn-sm" style="background:#16a34a;color:white;font-weight:700;">
+        ➕ تسجيل إنتاج
+      </a>
+      <a href="?year={{ month_ctx.selected_year }}&month={{ month_ctx.selected_month }}&export=pdf" class="btn btn-sm" style="background:#6e40c9;color:white;">
+        📄 كشف الحساب (PDF)
+      </a>
+      <a href="{% url 'external:logout' %}" class="btn btn-sm" style="background:rgba(255,255,255,0.18);color:white;">خروج</a>
+    </div>
+  </header>
+
+  <main class="page-container" style="max-width:1100px;margin:1.5rem auto;padding:0 1rem;">
+    <!-- Month Navigation -->
+    <div class="month-nav-box">
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        <a href="?year={{ month_ctx.prev_year }}&month={{ month_ctx.prev_month }}" class="btn btn-sm btn-secondary" title="الشهر السابق">
+          ← {{ month_ctx.prev_month }}/{{ month_ctx.prev_year }}
+        </a>
+        <div style="font-weight:800;font-size:1.15rem;color:#6e40c9;min-width:140px;text-align:center;">
+          📅 {{ month_ctx.month_name }} {{ month_ctx.selected_year }}
+        </div>
+        <a href="?year={{ month_ctx.next_year }}&month={{ month_ctx.next_month }}" class="btn btn-sm btn-secondary" title="الشهر التالي">
+          {{ month_ctx.next_month }}/{{ month_ctx.next_year }} →
+        </a>
+      </div>
+
+      <div style="display:flex;gap:0.5rem;align-items:center;">
+        <a href="?year={{ month_ctx.this_year }}&month={{ month_ctx.this_month }}"
+           class="btn btn-sm {% if month_ctx.is_current_month %}btn-primary{% else %}btn-secondary{% endif %}">
+          🌟 الشهر الحالي
+        </a>
+        <a href="?year={{ month_ctx.last_month_year }}&month={{ month_ctx.last_month_month }}"
+           class="btn btn-sm {% if month_ctx.is_last_month %}btn-primary{% else %}btn-secondary{% endif %}">
+          ⏪ الشهر السابق
+        </a>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem;">
+      <div class="stat-card">
+        <div class="stat-card-value" style="color:#6e40c9;">{{ summary.total_qty|ar_number }}</div>
+        <div class="stat-card-label">إجمالي القطع المنتجة ({{ month_ctx.month_name }})</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-value" style="font-size:1.35rem;color:#16a34a;">{{ summary.total_amount|currency_egp }}</div>
+        <div class="stat-card-label">إجمالي المستحقات والأرباح</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-value" style="color:#475569;">{{ summary.entry_count|ar_number }}</div>
+        <div class="stat-card-label">عدد سجلات الإنتاج</div>
+      </div>
+    </div>
+
+    <!-- Assigned Stages / Skills -->
+    <div class="card" style="margin-bottom:1.25rem;">
+      <div class="card-header"><h3 class="card-title">المراحل والمهارات المسندة لك</h3></div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.5rem;padding:1rem 1.25rem;">
+        {% for s in worker.stages.all %}
+          <span class="badge badge-purple" style="font-size:0.92rem;padding:0.4rem 0.75rem;">{{ s.name }}</span>
+        {% empty %}
+          <span style="color:var(--color-text-muted);">لا توجد مراحل مسندة حالياً</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Grouped Production Breakdown (Model Type -> Item Variant -> Stage/Skill) -->
+    <div style="margin-bottom:1.5rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <h2 style="font-size:1.15rem;font-weight:800;color:#1e293b;">
+          📊 تفاصيل الإنتاج حسب الموديل والمرحلة ({{ month_ctx.month_name }} {{ month_ctx.selected_year }})
+        </h2>
+      </div>
+
+      {% if production_groups %}
+        {% for model_code, variants_dict in production_groups.items %}
+          <div class="model-group-card">
+            <div class="model-group-header">
+              <div style="font-weight:800;font-size:1.05rem;color:#1e1033;">
+                🏷️ نوع الموديل: <code style="background:#e2e8f0;padding:0.15rem 0.5rem;border-radius:6px;color:#4c1d95;">{{ model_code }}</code>
+              </div>
+            </div>
+            <div>
+              {% for variant_key, stages_dict in variants_dict.items %}
+                <div class="variant-item">
+                  <div style="font-weight:700;color:#334155;margin-bottom:0.6rem;font-size:0.95rem;">
+                    🎨 الصنف (اللون / المقاس): <span style="color:#0f172a;background:#f8fafc;border:1px solid #e2e8f0;padding:0.2rem 0.6rem;border-radius:6px;">{{ variant_key }}</span>
+                  </div>
+                  <div style="display:flex;flex-wrap:wrap;gap:0.6rem;">
+                    {% for stage_name, qty in stages_dict.items %}
+                      <div class="stage-pill">
+                        <span style="color:#64748b;font-weight:600;">{{ stage_name }}:</span>
+                        <strong style="color:#6e40c9;font-size:1rem;">{{ qty|ar_number }} قطعة</strong>
+                      </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="card" style="padding:2.5rem 1rem;text-align:center;">
+          <div style="font-size:2.5rem;margin-bottom:0.5rem;">📋</div>
+          <div style="font-weight:700;color:#475569;font-size:1.05rem;">لا توجد عمليات إنتاج مسجلة في شهر {{ month_ctx.month_name }} {{ month_ctx.selected_year }}</div>
+          <p style="color:#94a3b8;font-size:0.85rem;margin-top:0.25rem;">يمكنك تسجيل إنتاجك الآن عبر مسح رمز QR للصنف أو الضغط على زر "تسجيل إنتاج"</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Production Log Table -->
+    <div class="card">
+      <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <h3 class="card-title">سجل العمليات والإنتاج المفصل</h3>
+        <span class="badge badge-gray">{{ summary.entry_count }} عملية</span>
+      </div>
+      {% if page_obj.object_list %}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>الموديل</th>
+              <th>النوع</th>
+              <th>المرحلة</th>
+              <th>الكمية</th>
+              <th>المستحق</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in page_obj %}
+            <tr>
+              <td style="font-size:0.82rem;font-weight:600;">{{ entry.production_date }}</td>
+              <td><code style="font-size:0.82rem;color:#6e40c9;">{{ entry.variant.product_model.code }}</code></td>
+              <td style="font-size:0.85rem;">{{ entry.variant.color }} / {{ entry.variant.size }}</td>
+              <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
+              <td style="font-weight:800;color:#6e40c9;">{{ entry.quantity|ar_number }}</td>
+              <td style="font-weight:800;color:#16a34a;">{{ entry.total_amount|currency_egp }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include "partials/pagination.html" %}
+      {% else %}
+      <div class="empty-state" style="padding:2rem;">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-title">لا توجد سجلات مسجلة في هذه الفترة</div>
+      </div>
+      {% endif %}
+    </div>
+  </main>
+
+  <footer style="text-align:center;padding:2rem 1rem;color:#94a3b8;font-size:0.8rem;">
+    🌹 مصنع الوردة الحمراء للملابس الجاهزة — نظام متابعة الإنتاج
+  </footer>
+
+  <script src="{% static 'js/main.js' %}"></script>
+</body>
+</html>

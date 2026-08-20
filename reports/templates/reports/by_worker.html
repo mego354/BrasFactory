@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load factory_tags %}
-{% block title %}حسابات العمال | Worker Accounting{% endblock %}
-{% block page_title %}حسابات ومستحقات العمال (Worker Accounting){% endblock %}
+{% block title %}تقرير العمال{% endblock %}
+{% block page_title %}تقرير الإنتاج حسب العامل{% endblock %}
 {% block content %}
 <div class="filter-bar">
   <form method="get">
@@ -21,64 +21,24 @@
       <input type="date" name="end_date" class="form-control" value="{{ filters.end_date }}">
     </div>
     <button type="submit" class="btn btn-primary">تصفية</button>
-    <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">📄 تحميل كشف الحساب (PDF)</a>
+    <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">📄 تحميل PDF</a>
   </form>
 </div>
 
-<!-- Summary Cards -->
-<div class="grid-stats-responsive" style="margin-bottom:1.25rem;">
-  <div class="stat-card">
-    <div class="stat-card-value">{{ summary.total_qty|ar_number }}</div>
-    <div class="stat-card-label">إجمالي القطع المنتجة</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-value" style="color:var(--color-success);">{{ summary.total_value|currency_egp }}</div>
-    <div class="stat-card-label">إجمالي المستحقات والأرباح</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-card-value">{{ data|length|ar_number }}</div>
-    <div class="stat-card-label">عدد العمال المنتجين</div>
-  </div>
-</div>
-
 <div class="card">
-  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
-    <h3 class="card-title">جدول حسابات ومستحقات العمال (مرتب حسب الأعلى استحقاقاً)</h3>
-    <span class="badge badge-purple">{{ data|length }} عامل</span>
-  </div>
   <div class="table-container">
     <table class="table">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>العامل</th>
-          <th>الكمية المنتجة</th>
-          <th>إجمالي المستحقات</th>
-          <th>عدد السجلات</th>
-          <th>كشف حساب</th>
-        </tr>
-      </thead>
+      <thead><tr><th>العامل</th><th>الكمية المنتجة</th><th>إجمالي الأرباح</th><th>سجلات الإنتاج</th></tr></thead>
       <tbody>
         {% for row in data %}
         <tr>
-          <td style="font-weight:700;color:var(--color-text-muted);">{{ forloop.counter }}</td>
-          <td>
-            <a href="{% url 'workers:detail' row.worker__id %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">
-              {{ row.worker__name }}
-            </a>
-          </td>
-          <td style="font-weight:800;color:var(--color-primary);">{{ row.total_qty|ar_number }} قطعة</td>
-          <td style="font-weight:800;color:var(--color-success);font-size:1.05rem;">{{ row.total_earnings|currency_egp }}</td>
-          <td style="color:var(--color-text-muted);">{{ row.entry_count }} سجل</td>
-          <td>
-            <a href="{% url 'workers:detail' row.worker__id %}?start_date={{ filters.start_date }}&end_date={{ filters.end_date }}&export=pdf"
-               class="btn btn-sm btn-secondary" style="padding:0.25rem 0.5rem;font-size:0.78rem;">
-              📄 كشف PDF
-            </a>
-          </td>
+          <td><a href="{% url 'workers:detail' row.worker__id %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">{{ row.worker__name }}</a></td>
+          <td style="font-weight:800;color:var(--color-primary);">{{ row.total_qty|ar_number }}</td>
+          <td style="font-weight:800;color:var(--color-success);">{{ row.total_earnings|currency_egp }}</td>
+          <td style="color:var(--color-text-muted);">{{ row.entry_count }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:2rem;">لا توجد بيانات مطابقة للفترة المحددة</td></tr>
+        <tr><td colspan="4" style="text-align:center;color:var(--color-text-muted);padding:2rem;">لا توجد بيانات مطابقة</td></tr>
         {% endfor %}
       </tbody>
     </table>
