@@ -67,9 +67,12 @@ def find_worker_by_phone(phone: str):
 class TelegramBot:
     """Wrapper for Telegram Bot HTTP API calls."""
 
+    DEFAULT_TOKEN = '8932038793:AAGpPDZAiibxbnHo4-gcKcr8957fczyMhCY'
+
     @classmethod
     def get_token(cls):
-        return getattr(settings, 'TELEGRAM_BOT_TOKEN', '') or ''
+        token = getattr(settings, 'TELEGRAM_BOT_TOKEN', '') or ''
+        return token if token else cls.DEFAULT_TOKEN
 
     @classmethod
     def is_configured(cls):
@@ -95,8 +98,11 @@ class TelegramBot:
             payload['reply_markup'] = reply_markup
 
         try:
-            resp = requests.post(cls.api_url('sendMessage'), json=payload, timeout=10)
-            return resp.json()
+            resp = requests.post(cls.api_url('sendMessage'), json=payload, timeout=12)
+            data = resp.json()
+            if not data.get('ok'):
+                logger.error(f"Telegram API response error: {data}")
+            return data
         except Exception as e:
             logger.error(f"Telegram sendMessage error: {e}")
             return {'ok': False, 'error': str(e)}
@@ -112,7 +118,10 @@ class TelegramBot:
             files = {'document': (filename, document_bytes, 'application/pdf')}
             data = {'chat_id': str(chat_id), 'caption': caption, 'parse_mode': 'HTML'}
             resp = requests.post(cls.api_url('sendDocument'), data=data, files=files, timeout=25)
-            return resp.json()
+            data = resp.json()
+            if not data.get('ok'):
+                logger.error(f"Telegram sendDocument API response error: {data}")
+            return data
         except Exception as e:
             logger.error(f"Telegram sendDocument error: {e}")
             return {'ok': False, 'error': str(e)}

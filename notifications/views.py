@@ -28,11 +28,16 @@ class TelegramWebhookView(View):
         try:
             payload = json.loads(request.body.decode('utf-8'))
         except Exception as e:
+            logger.error(f"Invalid Telegram Webhook JSON: {e}")
             return JsonResponse({'status': 'invalid_json', 'error': str(e)}, status=400)
 
-        base_url = request.build_absolute_uri('/')
-        result = process_telegram_update(payload, base_url=base_url)
-        return JsonResponse({'status': 'ok', 'result': result})
+        try:
+            base_url = request.build_absolute_uri('/')
+            result = process_telegram_update(payload, base_url=base_url)
+            return JsonResponse({'status': 'ok', 'result': result})
+        except Exception as e:
+            logger.error(f"Error processing Telegram update: {e}", exc_info=True)
+            return JsonResponse({'status': 'error', 'error': str(e)}, status=200)
 
     def get(self, request):
         return HttpResponse("Telegram Bot Webhook Endpoint is active.")
@@ -41,7 +46,7 @@ class TelegramWebhookView(View):
 class MagicLoginView(View):
     """
     Validates a single-use token from Telegram and authenticates
-    the client or worker directly into their dashboard.
+    the worker directly into their dashboard.
     """
 
     def get(self, request, token):
@@ -52,7 +57,7 @@ class MagicLoginView(View):
             return redirect('accounts:login')
 
         if not token_obj.is_valid:
-            messages.error(request, 'عذراً، هذا الرابط مستخدم بالفعل أو انتهت صلاحيته.')
+            messages.error(request, 'عذراً، هذا الرابط مستخدم بالفعل أو انتهت صلاحيته (صلاحية الرابط صالحة لمرة واحدة فقط وخلال ساعة واحدة).')
             return redirect('accounts:login')
 
         # Mark as used immediately (single-use)
@@ -71,9 +76,7 @@ class MagicLoginView(View):
 
         messages.success(request, f'أهلاً بك يا {token_obj.name}! تم تسجيل دخولك بنجاح.')
 
-        if token_obj.entity_type == 'client':
-            return redirect('external:client_dashboard')
-        elif token_obj.entity_type == 'worker':
+        if token_obj.entity_type == 'worker':
             return redirect('external:worker_dashboard')
         else:
             return redirect('production:dashboard')
