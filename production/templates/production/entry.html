@@ -254,7 +254,9 @@
             <th>التاريخ</th>
             <th>المنتج</th>
             <th>المرحلة</th>
+            {% if not logged_worker %}
             <th>العامل</th>
+            {% endif %}
             <th>الكمية</th>
             <th>الإجمالي</th>
             <th></th>
@@ -265,23 +267,29 @@
           <tr>
             <td style="font-size:0.8rem;color:var(--color-text-muted);">{{ entry.production_date }}</td>
             <td>
+              {% if request.user.is_authenticated %}
               <a href="{% url 'catalog:model_detail' entry.variant.product_model.pk %}"
                  style="font-weight:700;color:var(--color-primary);text-decoration:none;display:inline-flex;align-items:center;gap:0.35rem;"
                  title="عرض تفاصيل الموديل">
                <span>{{ entry.variant.product_model.code }} — {{ entry.variant.product_model.name }}</span>
                <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
               </a>
+              {% else %}
+              <span style="font-weight:700;color:var(--color-text);">{{ entry.variant.product_model.code }} — {{ entry.variant.product_model.name }}</span>
+              {% endif %}
               <div style="font-size:0.75rem;color:var(--color-text-muted);margin-top:0.15rem;">
                 {{ entry.variant.color.name }} / {{ entry.variant.size.name }}
               </div>
             </td>
             <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
+            {% if not logged_worker %}
             <td style="font-size:0.85rem;font-weight:600;">
               {{ entry.worker.name }}
               {% if entry.entered_by_worker %}
               <div style="margin-top:2px;"><span class="badge" style="background:#0088cc;color:white;font-size:0.7rem;">📱 إدخال العامل</span></div>
               {% endif %}
             </td>
+            {% endif %}
             <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
             <td style="font-weight:800;font-size:0.85rem;color:var(--color-success);">{{ entry.total_amount|currency_egp }}</td>
             <td>

@@ -8,10 +8,10 @@
   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
   كشف حساب PDF
 </a>
-<button type="button" onclick="copyTelegramLink()" class="btn btn-primary" style="background:#0088cc;border-color:#0088cc;">
+<!-- <button type="button" onclick="copyTelegramLink()" class="btn btn-primary" style="background:#0088cc;border-color:#0088cc;">
   <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.161c-.18.717-.962 4.084-1.362 5.752-.169.705-.43 1.045-.68 1.069-.545.051-.958-.359-1.487-.706-.828-.543-1.296-.881-2.099-1.411-.928-.612-.327-.948.203-1.499.139-.144 2.55-2.339 2.597-2.54.006-.025.011-.12-.049-.172-.06-.053-.149-.035-.213-.02-.091.021-1.536.977-4.335 2.868-.41.282-.782.42-1.114.412-.367-.008-1.072-.208-1.597-.378-.644-.21-1.155-.321-1.11-.678.023-.186.279-.377.766-.573 2.999-1.306 4.999-2.167 6.002-2.585 2.856-1.189 3.45-1.396 3.837-1.402.085-.001.276.021.4.122.105.086.134.202.146.284.013.087.027.283.015.437z"/></svg>
   نسخ رابط تليجرام
-</button>
+</button> -->
 <a href="{% url 'workers:edit' worker.pk %}" class="btn btn-secondary">تعديل</a>
 <form method="post" action="{% url 'workers:toggle' worker.pk %}" style="display:inline;">
   {% csrf_token %}
