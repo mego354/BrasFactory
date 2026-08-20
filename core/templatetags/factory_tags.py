@@ -97,3 +97,26 @@ def get_item(dictionary, key):
     if dictionary is None:
         return None
     return dictionary.get(str(key))
+
+
+@register.filter
+def qr_code_base64(data):
+    """Generates a data URI base64 PNG image of a QR code."""
+    if not data:
+        return ''
+    import io
+    import base64
+    import qrcode
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=5,
+        border=1,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    b64 = base64.b64encode(buffer.getvalue()).decode()
+    return f"data:image/png;base64,{b64}"

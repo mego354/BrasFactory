@@ -126,6 +126,7 @@ class TelegramBot:
             'chat_id': str(chat_id),
             'text': text,
             'parse_mode': 'HTML',
+            'disable_web_page_preview': True,
         }
         if reply_markup:
             payload['reply_markup'] = reply_markup
@@ -217,11 +218,16 @@ def _last_month():
 # ─────────────────────────────────────────────────────────────
 # Bot Update Processor & Dispatcher
 # ─────────────────────────────────────────────────────────────
-def process_telegram_update(update: dict, base_url: str = 'http://127.0.0.1:8000') -> dict:
+def process_telegram_update(update: dict, base_url: str = 'https://megahd.pythonanywhere.com') -> dict:
     """
     Processes incoming Telegram update payload (from Webhook).
     Returns result dict with action taken and response status.
     """
+    if not base_url or '127.0.0.1' in base_url or 'localhost' in base_url:
+        base_url = 'https://megahd.pythonanywhere.com'
+    elif base_url.startswith('http://') and 'pythonanywhere' in base_url:
+        base_url = 'https://' + base_url[7:]
+
     message = update.get('message') or update.get('edited_message')
     if not message:
         return {'status': 'ignored_non_message'}

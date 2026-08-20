@@ -273,6 +273,9 @@ class WorkerDetailView(View):
         paginator = Paginator(history, 25)
         page = paginator.get_page(request.GET.get('page'))
 
+        # Generate telegram bot deep link for instant binding
+        telegram_bot_deep_link = f"https://t.me/RoseRed_fact_bot?start=w_{worker.pk}"
+
         # Generate single-use telegram login token (1 hour validity)
         token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
         telegram_direct_url = request.build_absolute_uri(
@@ -290,25 +293,28 @@ class WorkerDetailView(View):
             'end_date': end_date,
             'stage_id': stage_id,
             'telegram_direct_url': telegram_direct_url,
+            'telegram_bot_deep_link': telegram_bot_deep_link,
         })
 
 
 @method_decorator(login_required, name='dispatch')
 class GenerateWorkerTelegramLinkView(View):
-    """Generate on-demand single-use 1-hour telegram link for the worker."""
+    """Generate on-demand 1-hour telegram link and deep-link for the worker."""
     def get(self, request, pk):
         worker = get_object_or_404(Worker, pk=pk)
         token_obj = MagicLoginToken.create_token('worker', worker.pk, worker.name, expiry_minutes=60)
         login_url = request.build_absolute_uri(
             reverse('workers:telegram_direct_login', kwargs={'token': token_obj.token})
         )
+        deep_link = f"https://t.me/RoseRed_fact_bot?start=w_{worker.pk}"
         return JsonResponse({
             'status': 'ok',
             'worker_id': worker.pk,
             'worker_name': worker.name,
             'login_url': login_url,
+            'deep_link': deep_link,
             'expires_in_hours': 1,
-            'is_single_use': True,
+            'is_single_use': False,
         })
 
 

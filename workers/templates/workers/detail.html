@@ -185,24 +185,46 @@
       </div>
     </div>
 
-    <!-- Telegram Link Box -->
+    <!-- Telegram Bot Binding & Portal Link Box -->
     <div class="card" style="margin-top:1rem;background:linear-gradient(135deg, rgba(0,136,204,0.06), rgba(110,64,201,0.06));border:1.5px solid #0088cc;">
       <div class="card-header">
-        <h4 class="card-title" style="color:#0088cc;font-size:0.95rem;">📱 رابط تليجرام المباشر للعامل</h4>
-        <span class="badge" style="background:#0088cc;color:white;">استخدام مرة واحدة — 1 ساعة</span>
+        <h4 class="card-title" style="color:#0088cc;font-size:0.95rem;">📱 ربط حساب تليجرام للعامل (QR & رابط مباشر)</h4>
+        <span class="badge" style="background:#0088cc;color:white;">توثيق فوري</span>
       </div>
-      <p style="font-size:0.82rem;color:var(--color-text-muted);margin-bottom:0.75rem;">
-        يمكن إرسال هذا الرابط للعامل لفتح لوحة إنتاجه الشخصية مباشرة وبشكل آمن. <b>الرابط يعمل لمرة واحدة فقط وصالح لمدة ساعة واحدة</b>.
-      </p>
-      <div style="display:flex;gap:0.5rem;">
-        <input type="text" id="telegramUrlInput" value="{{ telegram_direct_url }}" readonly
-               class="form-control" style="font-size:0.78rem;font-family:monospace;direction:ltr;background:white;">
-        <button type="button" onclick="generateAndCopyTelegramLink({{ worker.pk }})" class="btn btn-sm btn-primary" style="white-space:nowrap;background:#0088cc;border-color:#0088cc;">
-          📋 إنشاء ونسخ رابط جديد
-        </button>
+
+      <!-- Instant QR Code Binding -->
+      <div style="display:flex;align-items:center;gap:1.25rem;padding:0.75rem 0;border-bottom:1px dashed #cbd5e1;margin-bottom:0.75rem;flex-wrap:wrap;">
+        <div style="background:white;padding:0.5rem;border-radius:10px;border:1px solid #cbd5e1;text-align:center;">
+          <img src="{{ telegram_bot_deep_link|qr_code_base64 }}" alt="QR Code" style="width:120px;height:120px;display:block;margin:0 auto;">
+          <div style="font-size:0.7rem;font-weight:700;color:#0088cc;margin-top:0.25rem;">امسح بالهاتف للربط الفوري</div>
+        </div>
+        <div style="flex:1;min-width:200px;">
+          <div style="font-weight:800;color:#1e293b;font-size:0.95rem;margin-bottom:0.25rem;">⚡ الربط المباشر مع بوت تليجرام</div>
+          <p style="font-size:0.82rem;color:var(--color-text-muted);margin-bottom:0.5rem;">
+            امسح رمز QR أعلاه بكاميرا الهاتف أو أرسل هذا الرابط للعامل لربط حسابه بالبوت فوراً:
+          </p>
+          <a href="{{ telegram_bot_deep_link }}" target="_blank" class="btn btn-sm btn-primary" style="background:#0088cc;border-color:#0088cc;display:inline-flex;align-items:center;gap:0.4rem;">
+            <span>🤖 فتح البوت وربط حساب العامل</span>
+          </a>
+        </div>
       </div>
-      <div id="copyToast" style="display:none;font-size:0.78rem;color:var(--color-success);font-weight:700;margin-top:0.35rem;">
-        ✅ تم إنشاء ونسخ رابط جديد صالح لمرة واحدة إلى الحافظة!
+
+      <!-- Web Direct Login Link -->
+      <div>
+        <div style="font-weight:700;font-size:0.85rem;color:#334155;margin-bottom:0.25rem;">🌐 رابط الدخول المباشر للوحة الويب:</div>
+        <p style="font-size:0.78rem;color:var(--color-text-muted);margin-bottom:0.5rem;">
+          صالح لفتح لوحة إنتاج العامل الشخصية مباشرة من المتصفح بدون تليجرام.
+        </p>
+        <div style="display:flex;gap:0.5rem;">
+          <input type="text" id="telegramUrlInput" value="{{ telegram_direct_url }}" readonly
+                 class="form-control" style="font-size:0.78rem;font-family:monospace;direction:ltr;background:white;">
+          <button type="button" onclick="generateAndCopyTelegramLink({{ worker.pk }})" class="btn btn-sm btn-primary" style="white-space:nowrap;background:#0088cc;border-color:#0088cc;">
+            📋 نسخ الرابط
+          </button>
+        </div>
+        <div id="copyToast" style="display:none;font-size:0.78rem;color:var(--color-success);font-weight:700;margin-top:0.35rem;">
+          ✅ تم إنشاء ونسخ رابط جديد إلى الحافظة!
+        </div>
       </div>
     </div>
   </div>
