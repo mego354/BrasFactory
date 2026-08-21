@@ -153,44 +153,71 @@ class ReportByWorkerView(View):
 @method_decorator(login_required, name='dispatch')
 class ReportByClientView(View):
     def get(self, request):
+        req_year = request.GET.get('year')
+        req_month = request.GET.get('month')
+        month_ctx = None
+        if req_year or req_month or not (request.GET.get('start_date') or request.GET.get('end_date')):
+            from core.utils import get_month_navigation_context
+            month_ctx = get_month_navigation_context(req_year, req_month)
+
         filters = get_filters(request)
+        if month_ctx and not request.GET.get('start_date'):
+            filters['start_date'] = month_ctx['start_date']
+        if month_ctx and not request.GET.get('end_date'):
+            filters['end_date'] = month_ctx['end_date']
+
         data = services.production_by_client(filters)
         summary = services.overall_summary(filters)
+        clients = Client.objects.filter(is_active=True).order_by('name')
 
         if request.GET.get('export') == 'pdf':
             pdf = FactoryPDFReport(
                 title='تقرير إنتاج ومبيعات العملاء',
                 subtitle=f"الفترة من {filters['start_date']} إلى {filters['end_date']}"
             )
+            client_name = 'كل العملاء'
+            if filters['client_id']:
+                cl = clients.filter(pk=filters['client_id']).first()
+                if cl:
+                    client_name = cl.name
+
             pdf.add_header(filters_dict={
                 'الفترة': f"{filters['start_date']} إلى {filters['end_date']}",
+                'العميل': client_name,
             })
             pdf.add_kpis([
                 ('إجمالي القطع المنتجة', f"{summary['total_qty']:,} قطعة"),
                 ('إجمالي القيمة المحققة', f"{summary['total_value']:,.2f} ج.م"),
-                ('عدد العملاء النشطين', f"{len(data):,} عميل"),
+                ('عدد العملاء المنتجين', f"{len(data):,} عميل"),
+                ('عدد سجلات الإنتاج', f"{summary['entry_count']:,} سجل"),
             ])
 
             table_rows = []
             for r in data:
                 table_rows.append([
                     r['variant__product_model__client__code'],
+                    r['variant__product_model__client__name'],
                     f"{r['total_qty']:,}",
                     f"{r['total_value']:,.2f} ج.م",
-                    str(r['model_count']),
+                    f"{r['model_count']} موديل",
                 ])
 
             pdf.add_table(
-                headers=['كود العميل', 'الكمية المنتجة', 'إجمالي القيمة', 'الموديلات'],
+                headers=['كود العميل', 'اسم العميل / الشركة', 'الكمية المنتجة', 'إجمالي القيمة', 'الموديلات'],
                 rows=table_rows,
-                col_widths=[100, 135, 130, 170],
-                right_align_cols=[]
+                col_widths=[85, 170, 95, 110, 75],
+                right_align_cols=[1]
             )
-            return pdf.build_response('report_by_client.pdf')
+            return pdf.build_response(f"report_by_client_{filters['start_date']}_{filters['end_date']}.pdf")
 
         return render(request, 'reports/by_client.html', {
-            'data': data, 'summary': summary, 'filters': filters
+            'data': data,
+            'summary': summary,
+            'filters': filters,
+            'clients': clients,
+            'month_ctx': month_ctx,
         })
+
 
 
 @method_decorator(login_required, name='dispatch')

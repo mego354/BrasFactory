@@ -1,71 +1,296 @@
 {% extends "base.html" %}
 {% load factory_tags %}
-{% block title %}{{ client.name }} | ملف العميل{% endblock %}
+{% block title %}{{ client.name }} | ملف وكشف حساب العميل{% endblock %}
 {% block page_title %}{{ client.name }}{% endblock %}
+
 {% block topbar_actions %}
-<a href="?export=pdf" class="btn btn-secondary">
+<a href="?year={{ month_ctx.selected_year }}&month={{ month_ctx.selected_month }}{% if model_id %}&model={{ model_id }}{% endif %}{% if stage_id %}&stage={{ stage_id }}{% endif %}&export=pdf" class="btn btn-secondary">
   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-  كشف حساب PDF
+  كشف حساب وإنتاج PDF
 </a>
-<a href="{% url 'catalog:client_edit' client.pk %}" class="btn btn-secondary">تعديل</a>
+<a href="{% url 'catalog:model_wizard_step1' %}" class="btn btn-primary">+ إضافة موديل</a>
+<a href="{% url 'catalog:client_edit' client.pk %}" class="btn btn-secondary">✏️ تعديل</a>
 <form method="post" action="{% url 'catalog:client_toggle' client.pk %}" style="display:inline;">
   {% csrf_token %}
   <button class="btn {% if client.is_active %}btn-warning{% else %}btn-success{% endif %}">
-    {% if client.is_active %}تعطيل{% else %}تفعيل{% endif %}
+    {% if client.is_active %}⏸️ تعطيل{% else %}✅ تفعيل{% endif %}
   </button>
 </form>
+{% if summary.models_count == 0 and summary.entry_count == 0 %}
+<form method="post" action="{% url 'catalog:client_delete' client.pk %}" style="display:inline;" onsubmit="return confirm('هل أنت متأكد من رغبتك في حذف هذا العميل نهائياً؟');">
+  {% csrf_token %}
+  <button type="submit" class="btn btn-danger">🗑️ حذف</button>
+</form>
+{% endif %}
 <a href="{% url 'catalog:client_list' %}" class="btn btn-secondary">← العملاء</a>
 {% endblock %}
 
 {% block content %}
-<!-- Client Info Card -->
-<div class="card">
-  <div class="grid-stats-responsive" style="margin-bottom:0;">
-    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">كود العميل</div><div style="font-weight:800;font-family:monospace;font-size:1.05rem;color:var(--color-primary);">{{ client.code }}</div></div>
-    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">الهاتف</div><div style="font-weight:700;font-size:1rem;">{{ client.phone|default:'—' }}</div></div>
-    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">الحالة</div><div>{{ client.is_active|status_badge }}</div></div>
-    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">إجمالي القطع المنتجة</div><div style="font-weight:800;font-size:1.05rem;color:var(--color-primary);">{{ total_qty|ar_number }}</div></div>
-    <div><div style="font-size:0.75rem;color:var(--color-text-muted);">إجمالي القيمة</div><div style="font-weight:800;font-size:1.05rem;color:var(--color-success);">{{ total_value|currency_egp }}</div></div>
-    {% if client.notes %}
-    <div style="grid-column:1/-1;border-top:1px solid var(--color-border);padding-top:0.5rem;margin-top:0.25rem;">
-      <div style="font-size:0.75rem;color:var(--color-text-muted);">ملاحظات</div>
-      <div style="font-size:0.9rem;">{{ client.notes }}</div>
+<!-- Month Navigator Bar -->
+<div class="card" style="margin-bottom:1.5rem;padding:0.875rem 1.25rem;background:var(--color-surface);border:1.5px solid var(--color-border);box-shadow:var(--shadow-sm);">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+    <!-- Prev / Next Month Arrows -->
+    <div style="display:flex;align-items:center;gap:0.5rem;">
+      <a href="?year={{ month_ctx.prev_year }}&month={{ month_ctx.prev_month }}{% if model_id %}&model={{ model_id }}{% endif %}{% if stage_id %}&stage={{ stage_id }}{% endif %}" class="btn btn-sm btn-secondary" title="الشهر السابق">
+        ← {{ month_ctx.prev_month }}/{{ month_ctx.prev_year }}
+      </a>
+      <div style="font-weight:800;font-size:1.15rem;color:var(--color-primary);min-width:140px;text-align:center;">
+        📅 {{ month_ctx.month_name }} {{ month_ctx.selected_year }}
+      </div>
+      <a href="?year={{ month_ctx.next_year }}&month={{ month_ctx.next_month }}{% if model_id %}&model={{ model_id }}{% endif %}{% if stage_id %}&stage={{ stage_id }}{% endif %}" class="btn btn-sm btn-secondary" title="الشهر التالي">
+        {{ month_ctx.next_month }}/{{ month_ctx.next_year }} →
+      </a>
     </div>
-    {% endif %}
+
+    <!-- Quick Switch Buttons -->
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <a href="?year={{ month_ctx.this_year }}&month={{ month_ctx.this_month }}{% if model_id %}&model={{ model_id }}{% endif %}{% if stage_id %}&stage={{ stage_id }}{% endif %}"
+         class="btn btn-sm {% if month_ctx.is_current_month %}btn-primary{% else %}btn-secondary{% endif %}">
+        🌟 الشهر الحالي
+      </a>
+      <a href="?year={{ month_ctx.last_month_year }}&month={{ month_ctx.last_month_month }}{% if model_id %}&model={{ model_id }}{% endif %}{% if stage_id %}&stage={{ stage_id }}{% endif %}"
+         class="btn btn-sm {% if month_ctx.is_last_month %}btn-primary{% else %}btn-secondary{% endif %}">
+        ⏪ الشهر السابق
+      </a>
+    </div>
   </div>
 </div>
 
-<!-- Models List -->
-<div class="card">
-  <div class="card-header">
-    <h3 class="card-title">📦 موديلات هذا العميل ({{ models|length }})</h3>
-    <a href="{% url 'catalog:model_wizard_step1' %}" class="btn btn-sm btn-primary">+ موديل جديد</a>
+<!-- Summary Stats Cards -->
+<div class="grid-stats-responsive">
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#ede9fe;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#6e40c9"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+    </div>
+    <div class="stat-card-value">{{ summary.total_qty|ar_number }}</div>
+    <div class="stat-card-label">إنتاج {{ month_ctx.month_name }} (قطع)</div>
   </div>
-  {% if models %}
+
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#fef3c7;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#d97706"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    </div>
+    <div class="stat-card-value" style="font-size:1.35rem;">{{ summary.total_amount|currency_egp }}</div>
+    <div class="stat-card-label">قيمة إنتاج {{ month_ctx.month_name }}</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#dcfce7;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#16a34a"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    </div>
+    <div class="stat-card-value">{{ summary.entry_count|ar_number }}</div>
+    <div class="stat-card-label">سجلات الإنتاج المسجلة</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#dbeafe;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#1d4ed8"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+    </div>
+    <div class="stat-card-value">{{ summary.models_count|ar_number }}</div>
+    <div class="stat-card-label">موديلات العميل</div>
+  </div>
+</div>
+
+<!-- Variant Breakdown By Model Table (Matching Worker Breakdown) -->
+<div class="card" style="margin-bottom:1.5rem;">
+  <div class="card-header">
+    <h3 class="card-title">📊 إجمالي الإنتاج لكل موديل وصنف ومرحلة ({{ month_ctx.month_name }} {{ month_ctx.selected_year }})</h3>
+    <span class="badge badge-purple">{{ variant_breakdown|length }} بند</span>
+  </div>
+  {% if variant_breakdown %}
   <div class="table-container">
     <table class="table">
-      <thead><tr><th>الكود</th><th>الاسم</th><th>الأنواع</th><th>المخطط</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
-      <tbody>
-        {% for model in models %}
+      <thead>
         <tr>
-          <td><code>{{ model.code }}</code></td>
-          <td><a href="{% url 'catalog:model_detail' model.pk %}" style="color:var(--color-primary);font-weight:700;text-decoration:none;">{{ model.name }}</a></td>
-          <td><span class="badge badge-purple">{{ model.variants.count }} نوع</span></td>
-          <td style="font-weight:700;">{{ model.total_planned|ar_number }}</td>
-          <td>{{ model.is_active|status_badge }}</td>
-          <td>
-            <div class="table-actions">
-              <a href="{% url 'catalog:model_detail' model.pk %}" class="btn btn-sm btn-secondary">عرض</a>
-              <a href="{% url 'catalog:model_qr_sheet' model.pk %}" target="_blank" class="btn btn-sm btn-primary">📱 QR</a>
-            </div>
+          <th>كود الموديل</th>
+          <th>اسم الموديل</th>
+          <th>النوع (لون / مقاس)</th>
+          <th>مرحلة التشغيل</th>
+          <th>سعر الوحدة</th>
+          <th>الكمية المنتجة</th>
+          <th>إجمالي القيمة</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vb in variant_breakdown %}
+        <tr>
+          <td><code style="font-weight:700;">{{ vb.variant__product_model__code }}</code></td>
+          <td style="font-weight:700;">
+            <a href="{% url 'catalog:model_detail' vb.variant__product_model__id %}" style="color:var(--color-primary);text-decoration:none;">
+              {{ vb.variant__product_model__name }}
+            </a>
           </td>
+          <td>{{ vb.variant__color__name }} / {{ vb.variant__size__name }}</td>
+          <td><span class="badge badge-purple">{{ vb.stage__name }}</span></td>
+          <td style="color:var(--color-text-muted);">{{ vb.unit_price_snapshot|currency_egp }}</td>
+          <td style="font-weight:800;color:var(--color-primary);">{{ vb.total_quantity|ar_number }}</td>
+          <td style="font-weight:800;color:var(--color-success);">{{ vb.total_value|currency_egp }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <div class="empty-state"><div class="empty-state-icon">📦</div><div class="empty-state-title">لا توجد موديلات لهذا العميل بعد</div></div>
+  <p style="color:var(--color-text-muted);text-align:center;padding:1.5rem;">لا يوجد إنتاج مسجل لهذا العميل في شهر {{ month_ctx.month_name }} {{ month_ctx.selected_year }}.</p>
   {% endif %}
+</div>
+
+<!-- 2-Column Responsive Layout for Progress and Details -->
+<div class="grid-2col-responsive">
+  <!-- Left Side: Filters & Detailed Production Log -->
+  <div>
+    <!-- Model & Stage Filter Bar -->
+    <div class="filter-bar" style="margin-bottom:1rem;">
+      <form method="get" style="display:flex;gap:0.75rem;align-items:flex-end;width:100%;flex-wrap:wrap;">
+        <input type="hidden" name="year" value="{{ month_ctx.selected_year }}">
+        <input type="hidden" name="month" value="{{ month_ctx.selected_month }}">
+        
+        <div class="filter-group" style="flex:1;min-width:140px;">
+          <label class="form-label" style="margin-bottom:0.2rem;">الموديل</label>
+          <select name="model" class="form-control" data-auto-submit>
+            <option value="">كل الموديلات</option>
+            {% for m in client_models %}
+            <option value="{{ m.pk }}" {% if model_id == m.pk|stringformat:"s" %}selected{% endif %}>{{ m.code }} - {{ m.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="filter-group" style="flex:1;min-width:140px;">
+          <label class="form-label" style="margin-bottom:0.2rem;">المرحلة</label>
+          <select name="stage" class="form-control" data-auto-submit>
+            <option value="">كل المراحل</option>
+            {% for s in stages %}
+            <option value="{{ s.pk }}" {% if stage_id == s.pk|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </form>
+    </div>
+
+    <!-- Detailed Production History Table -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">📋 تفاصيل سجلات الإنتاج للعميل</h3>
+      </div>
+      {% if page_obj.object_list %}
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>الموديل</th>
+              <th>النوع</th>
+              <th>المرحلة</th>
+              <th>العامل</th>
+              <th>الكمية</th>
+              <th>القيمة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in page_obj %}
+            <tr>
+              <td style="font-size:0.78rem;color:var(--color-text-muted);">{{ entry.production_date }}</td>
+              <td style="font-size:0.82rem;">
+                <a href="{% url 'catalog:model_detail' entry.variant.product_model.pk %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">
+                  {{ entry.variant.product_model.code }}
+                </a>
+              </td>
+              <td style="font-size:0.82rem;">{{ entry.variant.color.name }} / {{ entry.variant.size.name }}</td>
+              <td><span class="badge badge-purple">{{ entry.stage.name }}</span></td>
+              <td style="font-size:0.82rem;font-weight:600;">{{ entry.worker.name }}</td>
+              <td style="font-weight:800;color:var(--color-primary);">{{ entry.quantity|ar_number }}</td>
+              <td style="font-weight:700;color:var(--color-success);">{{ entry.total_amount|currency_egp }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% include "partials/pagination.html" %}
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-title">لا توجد سجلات إنتاج مطابقة في هذه الفترة</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Right Side: Client Info & Model Progress Overview -->
+  <div>
+    <!-- Client Info Card -->
+    <div class="card" style="margin-bottom:1.25rem;">
+      <div class="card-header">
+        <h3 class="card-title">👥 بيانات العميل</h3>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.85rem;">
+        <div>
+          <div style="font-size:0.75rem;color:var(--color-text-muted);">اسم العميل / الشركة</div>
+          <strong style="font-size:1.1rem;color:var(--color-primary);">{{ client.name }}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+          <div>
+            <div style="font-size:0.75rem;color:var(--color-text-muted);">كود العميل</div>
+            <code style="font-weight:800;font-size:1rem;background:var(--color-surface-2);padding:2px 8px;border-radius:4px;">{{ client.code }}</code>
+          </div>
+          <div>
+            <div style="font-size:0.75rem;color:var(--color-text-muted);">رقم الهاتف</div>
+            <div style="font-weight:700;">{{ client.phone|default:'—' }}</div>
+          </div>
+          <div>
+            <div style="font-size:0.75rem;color:var(--color-text-muted);">حالة الحساب</div>
+            <div>{{ client.is_active|status_badge }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Models & Planned Progress Card -->
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">📦 موديلات العميل والتقدم ({{ models_progress|length }})</h3>
+        <a href="{% url 'catalog:model_wizard_step1' %}" class="btn btn-sm btn-primary">+ موديل جديد</a>
+      </div>
+      
+      {% if models_progress %}
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        {% for item in models_progress %}
+        <div style="border:1px solid var(--color-border);border-radius:var(--radius-md);padding:0.85rem;background:var(--color-surface-2);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;flex-wrap:wrap;gap:0.4rem;">
+            <div>
+              <a href="{% url 'catalog:model_detail' item.model.pk %}" style="font-weight:800;color:var(--color-primary);text-decoration:none;font-size:0.92rem;">
+                {{ item.model.code }} — {{ item.model.name }}
+              </a>
+            </div>
+            <div style="display:flex;gap:0.35rem;align-items:center;">
+              <span style="font-size:0.78rem;font-weight:700;">المخطط: {{ item.planned|ar_number }}</span>
+              <a href="{% url 'catalog:model_qr_sheet' item.model.pk %}" target="_blank" class="btn btn-sm btn-primary" style="padding:0.15rem 0.45rem;font-size:0.72rem;">📱 QR</a>
+            </div>
+          </div>
+
+          <!-- Stages Progress -->
+          <div style="display:flex;flex-direction:column;gap:0.35rem;">
+            {% for s in item.stages %}
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:0.1rem;">
+                <span style="font-weight:600;">{{ s.name }}</span>
+                <span style="color:var(--color-text-muted);">{{ s.produced|ar_number }} ({{ s.pct }}%)</span>
+              </div>
+              <div class="progress-wrap" style="height:6px;">
+                <div class="progress-bar" style="width:{{ s.pct }}%;"></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state" style="padding:1rem;">
+        <div class="empty-state-icon">📦</div>
+        <div class="empty-state-title">لا توجد موديلات لهذا العميل</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
 </div>
 {% endblock %}

@@ -20,6 +20,7 @@ urlpatterns = [
     path('clients/<int:pk>/', views.ClientDetailView.as_view(), name='client_detail'),
     path('clients/<int:pk>/edit/', views.ClientEditView.as_view(), name='client_edit'),
     path('clients/<int:pk>/toggle/', views.client_toggle, name='client_toggle'),
+    path('clients/<int:pk>/delete/', views.ClientDeleteView.as_view(), name='client_delete'),
 
     # Product Models (at /models/)
     path('models/', views.ModelListView.as_view(), name='model_list'),

@@ -1,21 +1,70 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block page_title %}{{ title }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{% url 'catalog:client_list' %}" class="btn btn-secondary">
+  ← العودة للعملاء
+</a>
+{% endblock %}
+
 {% block content %}
-<div class="card" style="max-width:560px;margin:0 auto;">
-  <div class="card-header"><h2 class="card-title">{{ title }}</h2></div>
-  <form method="post">
+<div class="card" style="max-width:620px;margin:0 auto;box-shadow:var(--shadow-md);">
+  <div class="card-header" style="border-bottom:1px solid var(--color-border);padding-bottom:1rem;margin-bottom:1.25rem;">
+    <h2 class="card-title" style="font-size:1.2rem;display:flex;align-items:center;gap:0.5rem;">
+      <span>👥</span>
+      <span>{{ title }}</span>
+    </h2>
+  </div>
+
+  <form method="post" novalidate>
     {% csrf_token %}
-    {% for field in form %}
-    <div class="form-group">
-      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-      {{ field }}
-      {% if field.errors %}<div class="invalid-feedback">{{ field.errors.0 }}</div>{% endif %}
+    
+    {% if form.non_field_errors %}
+    <div class="alert alert-error" style="margin-bottom:1.25rem;">
+      {{ form.non_field_errors.0 }}
     </div>
-    {% endfor %}
-    <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
-      <a href="{% url 'catalog:client_list' %}" class="btn btn-secondary">إلغاء</a>
-      <button type="submit" class="btn btn-primary">حفظ</button>
+    {% endif %}
+
+    <div style="display:flex;flex-direction:column;gap:1.15rem;">
+      <div class="form-group">
+        <label class="form-label" for="{{ form.code.id_for_label }}" style="font-weight:700;">
+          كود العميل <span style="color:var(--color-danger);">*</span>
+        </label>
+        {{ form.code }}
+        <div style="font-size:0.75rem;color:var(--color-text-muted);margin-top:0.25rem;">كود مميز للعميل لا يتكرر (مثال: CLT-001 أو AL-AMAL).</div>
+        {% if form.code.errors %}<div class="invalid-feedback" style="display:block;color:var(--color-danger);font-size:0.8rem;margin-top:0.25rem;">{{ form.code.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.name.id_for_label }}" style="font-weight:700;">
+          اسم العميل / الشركة <span style="color:var(--color-danger);">*</span>
+        </label>
+        {{ form.name }}
+        {% if form.name.errors %}<div class="invalid-feedback" style="display:block;color:var(--color-danger);font-size:0.8rem;margin-top:0.25rem;">{{ form.name.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.phone.id_for_label }}" style="font-weight:700;">
+          رقم الهاتف / التواصل
+        </label>
+        {{ form.phone }}
+        {% if form.phone.errors %}<div class="invalid-feedback" style="display:block;color:var(--color-danger);font-size:0.8rem;margin-top:0.25rem;">{{ form.phone.errors.0 }}</div>{% endif %}
+      </div>
+
+      <div class="form-group" style="display:flex;align-items:center;gap:0.75rem;background:var(--color-surface-2);padding:0.75rem 1rem;border-radius:var(--radius-sm);margin-top:0.5rem;">
+        {{ form.is_active }}
+        <label for="{{ form.is_active.id_for_label }}" style="font-weight:700;margin:0;cursor:pointer;">
+          حساب العميل نشط في النظام
+        </label>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;justify-content:flex-end;margin-top:1.75rem;padding-top:1rem;border-top:1px solid var(--color-border);">
+      <a href="{% if client %}{% url 'catalog:client_detail' client.pk %}{% else %}{% url 'catalog:client_list' %}{% endif %}" class="btn btn-secondary">إلغاء</a>
+      <button type="submit" class="btn btn-primary" style="padding:0.6rem 1.5rem;font-weight:700;">
+        💾 حفظ البيانات
+      </button>
     </div>
   </form>
 </div>

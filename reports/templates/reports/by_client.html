@@ -1,38 +1,162 @@
 {% extends "base.html" %}
 {% load factory_tags %}
-{% block title %}تقرير العملاء{% endblock %}
-{% block page_title %}تقرير الإنتاج حسب العميل{% endblock %}
+{% block title %}تقرير إنتاج العملاء{% endblock %}
+{% block page_title %}تقرير الإنتاج والمبيعات حسب العميل{% endblock %}
+
+{% block topbar_actions %}
+<a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">
+  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+  تقرير العملاء PDF
+</a>
+<a href="{% url 'catalog:client_list' %}" class="btn btn-primary">
+  👥 دليل العملاء
+</a>
+{% endblock %}
+
 {% block content %}
+<!-- Month Navigator Bar (If month context available) -->
+{% if month_ctx %}
+<div class="card" style="margin-bottom:1.5rem;padding:0.875rem 1.25rem;background:var(--color-surface);border:1.5px solid var(--color-border);box-shadow:var(--shadow-sm);">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+    <!-- Prev / Next Month Arrows -->
+    <div style="display:flex;align-items:center;gap:0.5rem;">
+      <a href="?year={{ month_ctx.prev_year }}&month={{ month_ctx.prev_month }}{% if filters.client_id %}&client={{ filters.client_id }}{% endif %}" class="btn btn-sm btn-secondary" title="الشهر السابق">
+        ← {{ month_ctx.prev_month }}/{{ month_ctx.prev_year }}
+      </a>
+      <div style="font-weight:800;font-size:1.15rem;color:var(--color-primary);min-width:140px;text-align:center;">
+        📅 {{ month_ctx.month_name }} {{ month_ctx.selected_year }}
+      </div>
+      <a href="?year={{ month_ctx.next_year }}&month={{ month_ctx.next_month }}{% if filters.client_id %}&client={{ filters.client_id }}{% endif %}" class="btn btn-sm btn-secondary" title="الشهر التالي">
+        {{ month_ctx.next_month }}/{{ month_ctx.next_year }} →
+      </a>
+    </div>
+
+    <!-- Quick Switch Buttons -->
+    <div style="display:flex;gap:0.5rem;align-items:center;">
+      <a href="?year={{ month_ctx.this_year }}&month={{ month_ctx.this_month }}{% if filters.client_id %}&client={{ filters.client_id }}{% endif %}"
+         class="btn btn-sm {% if month_ctx.is_current_month %}btn-primary{% else %}btn-secondary{% endif %}">
+        🌟 الشهر الحالي
+      </a>
+      <a href="?year={{ month_ctx.last_month_year }}&month={{ month_ctx.last_month_month }}{% if filters.client_id %}&client={{ filters.client_id }}{% endif %}"
+         class="btn btn-sm {% if month_ctx.is_last_month %}btn-primary{% else %}btn-secondary{% endif %}">
+        ⏪ الشهر السابق
+      </a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Summary Stats Cards -->
+<div class="grid-stats-responsive">
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#ede9fe;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#6e40c9"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+    </div>
+    <div class="stat-card-value">{{ summary.total_qty|ar_number }}</div>
+    <div class="stat-card-label">إجمالي القطع المنتجة</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#fef3c7;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#d97706"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    </div>
+    <div class="stat-card-value" style="font-size:1.35rem;">{{ summary.total_value|currency_egp }}</div>
+    <div class="stat-card-label">إجمالي القيمة المحققة</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#dcfce7;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#16a34a"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+    </div>
+    <div class="stat-card-value">{{ data|length|ar_number }}</div>
+    <div class="stat-card-label">العملاء المنتجون بالفترة</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-card-icon" style="background:#dbeafe;">
+      <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="#1d4ed8"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    </div>
+    <div class="stat-card-value">{{ summary.entry_count|ar_number }}</div>
+    <div class="stat-card-label">سجلات الإنتاج المسجلة</div>
+  </div>
+</div>
+
+<!-- Filters Bar -->
 <div class="filter-bar">
-  <form method="get">
-    <div class="filter-group">
+  <form method="get" style="display:flex;gap:0.75rem;align-items:flex-end;width:100%;flex-wrap:wrap;">
+    {% if month_ctx %}
+    <input type="hidden" name="year" value="{{ month_ctx.selected_year }}">
+    <input type="hidden" name="month" value="{{ month_ctx.selected_month }}">
+    {% endif %}
+
+    <div class="filter-group" style="flex:1;min-width:160px;">
+      <label class="form-label" style="margin-bottom:0.2rem;">تصفية حسب العميل</label>
+      <select name="client" class="form-control" data-auto-submit>
+        <option value="">كل العملاء</option>
+        {% for c in clients %}
+        <option value="{{ c.pk }}" {% if filters.client_id == c.pk|stringformat:"s" %}selected{% endif %}>{{ c.name }} ({{ c.code }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="filter-group" style="min-width:140px;">
       <label class="form-label" style="margin-bottom:0.2rem;">من تاريخ</label>
       <input type="date" name="start_date" class="form-control" value="{{ filters.start_date }}">
     </div>
-    <div class="filter-group">
+
+    <div class="filter-group" style="min-width:140px;">
       <label class="form-label" style="margin-bottom:0.2rem;">إلى تاريخ</label>
       <input type="date" name="end_date" class="form-control" value="{{ filters.end_date }}">
     </div>
-    <button type="submit" class="btn btn-primary">تصفية</button>
-    <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">📄 تحميل PDF</a>
+
+    <div style="display:flex;gap:0.5rem;">
+      <button type="submit" class="btn btn-primary">تصفية</button>
+      <a href="?{{ request.GET.urlencode }}&export=pdf" class="btn btn-secondary">📄 تحميل PDF</a>
+      {% if filters.client_id or request.GET.start_date or request.GET.end_date %}
+      <a href="{% url 'reports:by_client' %}" class="btn btn-secondary">إلغاء التصفية</a>
+      {% endif %}
+    </div>
   </form>
 </div>
 
+<!-- Report Table -->
 <div class="card">
+  <div class="card-header">
+    <h3 class="card-title">👥 إنتاج ومبيعات العملاء (الفترة: {{ filters.start_date }} إلى {{ filters.end_date }})</h3>
+    <span class="badge badge-purple">{{ data|length }} عميل</span>
+  </div>
   <div class="table-container">
     <table class="table">
-      <thead><tr><th>الكود</th><th>اسم العميل</th><th>الكمية</th><th>القيمة</th><th>الموديلات</th></tr></thead>
+      <thead>
+        <tr>
+          <th>كود العميل</th>
+          <th>اسم العميل / الشركة</th>
+          <th>الكمية المنتجة</th>
+          <th>إجمالي القيمة</th>
+          <th>الموديلات</th>
+          <th style="text-align:center;">الإجراءات</th>
+        </tr>
+      </thead>
       <tbody>
         {% for row in data %}
         <tr>
-          <td><code>{{ row.variant__product_model__client__code }}</code></td>
-          <td><a href="{% url 'catalog:client_detail' row.variant__product_model__client__id %}" style="font-weight:700;color:var(--color-primary);text-decoration:none;">{{ row.variant__product_model__client__name }}</a></td>
-          <td style="font-weight:800;color:var(--color-primary);">{{ row.total_qty|ar_number }}</td>
+          <td><code style="background:var(--color-surface-2);padding:2px 6px;border-radius:4px;font-weight:700;">{{ row.variant__product_model__client__code }}</code></td>
+          <td>
+            <a href="{% url 'catalog:client_detail' row.variant__product_model__client__id %}?start_date={{ filters.start_date }}&end_date={{ filters.end_date }}" style="font-weight:800;color:var(--color-primary);text-decoration:none;font-size:0.95rem;">
+              {{ row.variant__product_model__client__name }}
+            </a>
+          </td>
+          <td style="font-weight:800;color:var(--color-primary);">{{ row.total_qty|ar_number }} قطعة</td>
           <td style="font-weight:800;color:var(--color-success);">{{ row.total_value|currency_egp }}</td>
-          <td>{{ row.model_count }}</td>
+          <td><span class="badge badge-info">{{ row.model_count }} موديل</span></td>
+          <td style="text-align:center;">
+            <a href="{% url 'catalog:client_detail' row.variant__product_model__client__id %}?start_date={{ filters.start_date }}&end_date={{ filters.end_date }}" class="btn btn-sm btn-secondary">
+              📊 كشف تفصيلي
+            </a>
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="5" style="text-align:center;color:var(--color-text-muted);padding:2rem;">لا توجد بيانات مطابقة</td></tr>
+        <tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:2.5rem;">لا توجد عمليات إنتاج مسجلة للعملاء في هذه الفترة</td></tr>
         {% endfor %}
       </tbody>
     </table>

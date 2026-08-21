@@ -173,8 +173,18 @@ def stage_toggle(request, pk):
     return redirect('catalog:stage_list')
 
 
+from core.utils import get_month_navigation_context, get_current_month_date_range
+from .services import (
+    generate_variants, get_model_stage_price,
+    build_model_entry_url, build_variant_entry_url, generate_qr_png_bytes, generate_qr_base64,
+    get_client_production_summary, get_client_production_history, get_client_variant_breakdown,
+    get_client_models_progress
+)
+from production.models import ProductionEntry
+
+
 # ─────────────────────────────────────────────
-# Client CRUD
+# Client CRUD & Production Reporting
 # ─────────────────────────────────────────────
 @method_decorator(login_required, name='dispatch')
 class ClientListView(View):
@@ -189,21 +199,27 @@ class ClientListView(View):
         elif status == 'inactive':
             clients = clients.filter(is_active=False)
 
+        # Dashboard KPIs for Clients
+        total_clients_count = Client.objects.count()
+        active_clients_count = Client.objects.filter(is_active=True).count()
+        total_models_count = ProductModel.objects.count()
+        total_production_value = ProductionEntry.objects.filter(is_cancelled=False).aggregate(t=Sum('total_amount'))['t'] or 0
+
         if request.GET.get('export') == 'pdf':
             pdf = FactoryPDFReport(
                 title='دليل وسجل العملاء',
-                subtitle='قائمة العملاء المسجلين وبيانات الاتصال والموديلات'
+                subtitle='قائمة العملاء المسجلين وبيانات الاتصال وإجمالي الموديلات'
             )
             status_text = 'الكل' if not status else ('النشطين فقط' if status == 'active' else 'غير النشطين')
             pdf.add_header(filters_dict={
                 'بحث': q if q else 'الكل',
                 'الحالة': status_text,
             })
-            total_clients = clients.count()
-            active_count = clients.filter(is_active=True).count()
             pdf.add_kpis([
-                ('إجمالي العملاء', f"{total_clients:,} عميل"),
-                ('العملاء النشطون', f"{active_count:,} عميل"),
+                ('إجمالي العملاء', f"{total_clients_count:,} عميل"),
+                ('العملاء النشطون', f"{active_clients_count:,} عميل"),
+                ('إجمالي الموديلات', f"{total_models_count:,} موديل"),
+                ('قيمة الإنتاج الكلية', f"{total_production_value:,.2f} ج.م"),
             ])
             table_rows = []
             for cl in clients:
@@ -220,17 +236,24 @@ class ClientListView(View):
                 col_widths=[90, 195, 110, 70, 70],
                 right_align_cols=[1]
             )
-            return pdf.build_response('clients_list.pdf')
+            return pdf.build_response('clients_directory.pdf')
 
         paginator = Paginator(clients, 20)
         page = paginator.get_page(request.GET.get('page'))
         all_clients = Client.objects.annotate(models_count=Count('product_models')).order_by('name')
         if q:
             all_clients = all_clients.filter(Q(name__icontains=q) | Q(code__icontains=q) | Q(phone__icontains=q))
+
         return render(request, 'catalog/clients/list.html', {
-            'page_obj': page, 'q': q, 'status': status,
+            'page_obj': page,
+            'q': q,
+            'status': status,
             'active_clients': all_clients.filter(is_active=True),
             'inactive_clients': all_clients.filter(is_active=False),
+            'total_clients_count': total_clients_count,
+            'active_clients_count': active_clients_count,
+            'total_models_count': total_models_count,
+            'total_production_value': total_production_value,
         })
 
 
@@ -253,7 +276,8 @@ class ClientEditView(View):
     def get(self, request, pk):
         client = get_object_or_404(Client, pk=pk)
         return render(request, 'catalog/clients/form.html', {
-            'form': ClientForm(instance=client), 'client': client,
+            'form': ClientForm(instance=client),
+            'client': client,
             'title': f'تعديل العميل: {client.name}'
         })
 
@@ -265,88 +289,150 @@ class ClientEditView(View):
             messages.success(request, 'تم تحديث بيانات العميل بنجاح.')
             return redirect('catalog:client_detail', pk=client.pk)
         return render(request, 'catalog/clients/form.html', {
-            'form': form, 'client': client, 'title': f'تعديل العميل: {client.name}'
+            'form': form,
+            'client': client,
+            'title': f'تعديل العميل: {client.name}'
         })
 
 
 @method_decorator(login_required, name='dispatch')
+class ClientDeleteView(View):
+    """Safely delete client if no product models or production entries are attached."""
+    def post(self, request, pk):
+        client = get_object_or_404(Client, pk=pk)
+        models_count = client.product_models.count()
+        has_production = ProductionEntry.objects.filter(variant__product_model__client=client).exists()
+
+        if models_count > 0 or has_production:
+            messages.error(
+                request,
+                f'لا يمكن حذف العميل "{client.name}" نظراً لوجود {models_count} موديلات مسجلة أو سجلات إنتاج مرتبطة به. يرجى استخدام خاصية التعطيل (الأرشفة) بدلاً من الحذف.'
+            )
+            return redirect('catalog:client_detail', pk=pk)
+
+        client_name = client.name
+        client.delete()
+        messages.success(request, f'تم حذف العميل "{client_name}" بنجاح.')
+        return redirect('catalog:client_list')
+
+
+@method_decorator(login_required, name='dispatch')
 class ClientDetailView(View):
+    """Comprehensive Client Dashboard & Production Statement matching Worker Detail View."""
     def get(self, request, pk):
         client = get_object_or_404(Client, pk=pk)
-        models = client.product_models.select_related().prefetch_related('variants').order_by('-created_at')
-        # Financial summary
-        from production.models import ProductionEntry
-        entries = ProductionEntry.objects.filter(
-            variant__product_model__client=client,
-            is_cancelled=False
-        )
-        total_value = entries.aggregate(total=Sum('total_amount'))['total'] or 0
-        total_qty = entries.aggregate(total=Sum('quantity'))['total'] or 0
+
+        # Month Navigation Context
+        req_year = request.GET.get('year')
+        req_month = request.GET.get('month')
+        month_ctx = get_month_navigation_context(req_year, req_month)
+
+        start_date = request.GET.get('start_date') or month_ctx['start_date']
+        end_date = request.GET.get('end_date') or month_ctx['end_date']
+        model_id = request.GET.get('model') or None
+        stage_id = request.GET.get('stage') or None
+
+        summary = get_client_production_summary(client, start_date, end_date, model_id, stage_id)
+        history = get_client_production_history(client, start_date, end_date, model_id, stage_id)
+        variant_breakdown = get_client_variant_breakdown(client, start_date, end_date, model_id)
+        models_progress = get_client_models_progress(client, start_date, end_date)
+
+        client_models = client.product_models.filter(is_active=True).order_by('code')
+        stages = ProductionStage.objects.filter(is_active=True).order_by('sort_order')
 
         if request.GET.get('export') == 'pdf':
             pdf = FactoryPDFReport(
-                title=f'كشف حساب وبيانات العميل: {client.name}',
-                subtitle=f'كود العميل: {client.code}'
+                title=f'كشف إنتاج وحساب العميل: {client.name}',
+                subtitle=f'كود العميل: {client.code} | الفترة من {start_date} إلى {end_date}'
             )
+            model_filter_name = 'الكل'
+            if model_id:
+                m_obj = client_models.filter(pk=model_id).first()
+                if m_obj:
+                    model_filter_name = f"{m_obj.code} — {m_obj.name}"
+
+            stage_filter_name = 'الكل'
+            if stage_id:
+                s_obj = stages.filter(pk=stage_id).first()
+                if s_obj:
+                    stage_filter_name = s_obj.name
+
             pdf.add_header(filters_dict={
-                'كود العميل': client.code,
+                'العميل': f"{client.name} ({client.code})",
                 'رقم الهاتف': client.phone or '—',
+                'الفترة': f"{start_date} إلى {end_date}",
+                'الموديل': model_filter_name,
+                'المرحلة': stage_filter_name,
                 'الحالة': 'نشط' if client.is_active else 'معطل',
             })
             pdf.add_kpis([
-                ('إجمالي القطع المنتجة', f"{total_qty:,} قطعة"),
-                ('إجمالي قيمة الإنتاج', f"{total_value:,.2f} ج.م"),
-                ('عدد الموديلات', f"{models.count():,} موديل"),
+                ('إجمالي القطع المنتجة', f"{summary['total_qty']:,} قطعة"),
+                ('إجمالي القيمة الإجمالية', f"{summary['total_amount']:,.2f} ج.م"),
+                ('عدد سجلات الإنتاج', f"{summary['entry_count']:,} سجل"),
+                ('الموديلات المسجلة', f"{summary['models_count']:,} موديل"),
             ])
 
-            base_url = request.build_absolute_uri('/')
-            pdf.add_section_title('موديلات العميل والكميات المخططة وأكواد QR للتسجيل')
-            model_rows = []
-            for m in models:
-                m_qr = generate_qr_image_flowable(build_model_entry_url(m, base_url), size=28)
-                model_rows.append([
-                    m.code,
-                    m.name,
-                    f"{m.variants.count()} نوع",
-                    f"{m.total_planned:,} قطعة",
-                    'نشط' if m.is_active else 'معطل',
-                    m_qr,
-                ])
-            pdf.add_table(
-                headers=['الكود', 'اسم الموديل', 'الأنواع', 'المخطط', 'الحالة', 'رمز QR'],
-                rows=model_rows,
-                col_widths=[75, 160, 80, 85, 65, 70],
-                right_align_cols=[1]
-            )
+            if variant_breakdown:
+                pdf.add_section_title('ملخص الإنتاج حسب الموديل والأنواع والمراحل')
+                vb_rows = []
+                for vb in variant_breakdown:
+                    vb_rows.append([
+                        vb['variant__product_model__code'],
+                        vb['variant__product_model__name'],
+                        f"{vb['variant__color__name']} / {vb['variant__size__name']}",
+                        vb['stage__name'],
+                        f"{vb['unit_price_snapshot']:.2f} ج.م",
+                        f"{vb['total_quantity']:,}",
+                        f"{vb['total_value']:,.2f} ج.م",
+                    ])
+                pdf.add_table(
+                    headers=['الكود', 'الموديل', 'النوع (لون/مقاس)', 'المرحلة', 'سعر الوحدة', 'الكمية', 'إجمالي القيمة'],
+                    rows=vb_rows,
+                    col_widths=[65, 100, 110, 85, 65, 55, 80],
+                    right_align_cols=[1, 2, 3]
+                )
 
-            # Recent production entries
-            recent = entries.select_related('variant__color', 'variant__size', 'stage').order_by('-created_at')[:25]
-            if recent:
-                pdf.add_section_title('آخر سجلات الإنتاج للعميل مع أكواد QR للأنواع')
-                recent_rows = []
-                for e in recent:
-                    v_qr = generate_qr_image_flowable(build_variant_entry_url(e.variant, base_url), size=26)
-                    recent_rows.append([
+            if history:
+                pdf.add_section_title('سجل الإنتاج المفصل للعميل مع رموز QR')
+                h_rows = []
+                base_url = request.build_absolute_uri('/')
+                for e in history[:100]:
+                    v_qr = generate_qr_image_flowable(build_variant_entry_url(e.variant, base_url), size=24)
+                    h_rows.append([
                         str(e.production_date),
                         e.variant.product_model.code,
                         f"{e.variant.color.name} / {e.variant.size.name}",
                         e.stage.name,
+                        e.worker.name,
                         f"{e.quantity:,}",
+                        f"{e.total_amount:,.2f} ج.م",
                         v_qr,
                     ])
                 pdf.add_table(
-                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'الكمية', 'رمز QR'],
-                    rows=recent_rows,
-                    col_widths=[75, 75, 140, 115, 65, 65],
-                    right_align_cols=[2, 3]
+                    headers=['التاريخ', 'الموديل', 'النوع', 'المرحلة', 'العامل', 'الكمية', 'القيمة', 'رمز QR'],
+                    rows=h_rows,
+                    col_widths=[60, 65, 85, 75, 80, 50, 65, 80],
+                    right_align_cols=[1, 2, 3, 4]
                 )
-            return pdf.build_response(f'client_{client.code}_report.pdf')
+
+            return pdf.build_response(f'client_{client.code}_statement_{start_date}_{end_date}.pdf')
+
+        paginator = Paginator(history, 25)
+        page = paginator.get_page(request.GET.get('page'))
 
         return render(request, 'catalog/clients/detail.html', {
             'client': client,
-            'models': models,
-            'total_value': total_value,
-            'total_qty': total_qty,
+            'summary': summary,
+            'variant_breakdown': variant_breakdown,
+            'models_progress': models_progress,
+            'client_models': client_models,
+            'stages': stages,
+            'page_obj': page,
+            'month_ctx': month_ctx,
+            'start_date': start_date,
+            'end_date': end_date,
+            'model_id': model_id,
+            'stage_id': stage_id,
         })
 
 

@@ -300,4 +300,120 @@ class FactoryAppTests(TestCase):
         self.assertEqual(len(recent_entries), 1)
         self.assertEqual(recent_entries[0].pk, my_entry.pk)
 
+    def test_client_crud_lifecycle(self):
+        # 1. Create client
+        create_url = reverse('catalog:client_create')
+        resp = self.client_app.get(create_url)
+        self.assertEqual(resp.status_code, 200)
+
+        post_data = {
+            'code': 'CLT-999',
+            'name': 'عميل تجريبي جديد',
+            'phone': '01099998888',
+            'is_active': True,
+        }
+        resp = self.client_app.post(create_url, post_data)
+        self.assertEqual(resp.status_code, 302)
+        new_client = FactoryClient.objects.get(code='CLT-999')
+        self.assertEqual(new_client.name, 'عميل تجريبي جديد')
+
+        # 2. Edit client
+        edit_url = reverse('catalog:client_edit', kwargs={'pk': new_client.pk})
+        resp = self.client_app.get(edit_url)
+        self.assertEqual(resp.status_code, 200)
+
+        update_data = {
+            'code': 'CLT-999',
+            'name': 'عميل تجريبي معدل',
+            'phone': '01099998888',
+            'is_active': True,
+        }
+        resp = self.client_app.post(edit_url, update_data)
+        self.assertEqual(resp.status_code, 302)
+        new_client.refresh_from_db()
+        self.assertEqual(new_client.name, 'عميل تجريبي معدل')
+
+        # 3. Toggle client
+        toggle_url = reverse('catalog:client_toggle', kwargs={'pk': new_client.pk})
+        resp = self.client_app.post(toggle_url)
+        self.assertEqual(resp.status_code, 302)
+        new_client.refresh_from_db()
+        self.assertFalse(new_client.is_active)
+
+        # 4. Safe Delete client (no models/entries attached)
+        delete_url = reverse('catalog:client_delete', kwargs={'pk': new_client.pk})
+        resp = self.client_app.post(delete_url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(FactoryClient.objects.filter(code='CLT-999').exists())
+
+    def test_client_deletion_safety_with_models(self):
+        # Attempting to delete self.factory_client which has a model (self.model)
+        delete_url = reverse('catalog:client_delete', kwargs={'pk': self.factory_client.pk})
+        resp = self.client_app.post(delete_url, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'لا يمكن حذف العميل')
+        # Client still exists
+        self.assertTrue(FactoryClient.objects.filter(pk=self.factory_client.pk).exists())
+
+    def test_client_detail_and_pdf_statement(self):
+        # Create production entry for the client
+        create_production_entry(
+            variant_id=self.variant.pk,
+            stage_id=self.stage.pk,
+            worker_id=self.worker.pk,
+            quantity=50,
+            production_date='2026-08-16',
+            user=self.user,
+        )
+
+        detail_url = reverse('catalog:client_detail', kwargs={'pk': self.factory_client.pk})
+        
+        # Test HTML detail view
+        resp = self.client_app.get(detail_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.factory_client.name)
+        self.assertIn('month_ctx', resp.context)
+        self.assertIn('summary', resp.context)
+        self.assertIn('variant_breakdown', resp.context)
+        self.assertIn('models_progress', resp.context)
+
+        # Test Month navigation filter
+        resp_month = self.client_app.get(f"{detail_url}?year=2026&month=8")
+        self.assertEqual(resp_month.status_code, 200)
+
+        # Test PDF Statement Export
+        resp_pdf = self.client_app.get(f"{detail_url}?export=pdf&year=2026&month=8")
+        self.assertEqual(resp_pdf.status_code, 200)
+        self.assertEqual(resp_pdf['Content-Type'], 'application/pdf')
+
+    def test_client_report_and_pdf(self):
+        # Create production entry
+        create_production_entry(
+            variant_id=self.variant.pk,
+            stage_id=self.stage.pk,
+            worker_id=self.worker.pk,
+            quantity=30,
+            production_date='2026-08-16',
+            user=self.user,
+        )
+
+        report_url = reverse('reports:by_client')
+        
+        # Test HTML report view
+        resp = self.client_app.get(report_url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, self.factory_client.name)
+        self.assertIn('summary', resp.context)
+
+        # Test PDF report export
+        resp_pdf = self.client_app.get(f"{report_url}?export=pdf")
+        self.assertEqual(resp_pdf.status_code, 200)
+        self.assertEqual(resp_pdf['Content-Type'], 'application/pdf')
+
+    def test_client_in_nav_items(self):
+        resp = self.client_app.get(reverse('production:dashboard'))
+        self.assertEqual(resp.status_code, 200)
+        nav_urls = [item['url'] for item in resp.context['nav_items']]
+        self.assertIn('catalog:client_list', nav_urls)
+
 

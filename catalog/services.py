@@ -130,3 +130,141 @@ def generate_qr_base64(data: str) -> str:
     raw_bytes = generate_qr_png_bytes(data)
     b64_str = base64.b64encode(raw_bytes).decode('utf-8')
     return f"data:image/png;base64,{b64_str}"
+
+
+# ============================================================
+# Client Reporting Services (Matching Worker Services)
+# ============================================================
+def get_client_production_summary(client, start_date=None, end_date=None, model_id=None, stage_id=None):
+    """Return production earnings/financial summary for a client with optional filters."""
+    from production.models import ProductionEntry
+    from django.db.models import Sum, Count
+
+    qs = ProductionEntry.objects.filter(
+        variant__product_model__client=client,
+        is_cancelled=False
+    )
+    if start_date:
+        qs = qs.filter(production_date__gte=start_date)
+    if end_date:
+        qs = qs.filter(production_date__lte=end_date)
+    if model_id:
+        qs = qs.filter(variant__product_model_id=model_id)
+    if stage_id:
+        qs = qs.filter(stage_id=stage_id)
+
+    agg = qs.aggregate(
+        total_qty=Sum('quantity'),
+        total_amount=Sum('total_amount'),
+        entry_count=Count('id')
+    )
+    return {
+        'total_qty': agg['total_qty'] or 0,
+        'total_amount': agg['total_amount'] or 0,
+        'entry_count': agg['entry_count'] or 0,
+        'models_count': client.product_models.count(),
+    }
+
+
+def get_client_production_history(client, start_date=None, end_date=None, model_id=None, stage_id=None):
+    """Return detailed production entries for a client with related objects."""
+    from production.models import ProductionEntry
+
+    qs = ProductionEntry.objects.filter(
+        variant__product_model__client=client,
+        is_cancelled=False
+    ).select_related(
+        'variant__product_model',
+        'variant__color', 'variant__size',
+        'stage',
+        'worker'
+    ).order_by('-production_date', '-created_at')
+
+    if start_date:
+        qs = qs.filter(production_date__gte=start_date)
+    if end_date:
+        qs = qs.filter(production_date__lte=end_date)
+    if model_id:
+        qs = qs.filter(variant__product_model_id=model_id)
+    if stage_id:
+        qs = qs.filter(stage_id=stage_id)
+    return qs
+
+
+def get_client_variant_breakdown(client, start_date=None, end_date=None, model_id=None):
+    """
+    Return aggregated production summary grouped by model, color, size and stage for this client.
+    """
+    from production.models import ProductionEntry
+    from django.db.models import Sum
+
+    qs = ProductionEntry.objects.filter(
+        variant__product_model__client=client,
+        is_cancelled=False
+    )
+    if start_date:
+        qs = qs.filter(production_date__gte=start_date)
+    if end_date:
+        qs = qs.filter(production_date__lte=end_date)
+    if model_id:
+        qs = qs.filter(variant__product_model_id=model_id)
+
+    breakdown = qs.values(
+        'variant__product_model__id',
+        'variant__product_model__code',
+        'variant__product_model__name',
+        'variant__color__name',
+        'variant__size__name',
+        'stage__name',
+        'unit_price_snapshot'
+    ).annotate(
+        total_quantity=Sum('quantity'),
+        total_value=Sum('total_amount')
+    ).order_by('variant__product_model__code', 'variant__color__name', 'variant__size__name', 'stage__name')
+
+    return list(breakdown)
+
+
+def get_client_models_progress(client, start_date=None, end_date=None):
+    """
+    Return all models for the client with stage-level planned vs produced progress.
+    """
+    from production.models import ProductionEntry
+    from django.db.models import Sum
+
+    models = client.product_models.prefetch_related('model_stages__stage', 'variants').filter(is_active=True).order_by('-created_at')
+    result = []
+
+    for m in models:
+        planned = m.total_planned
+        stages_data = []
+        for ms in m.model_stages.filter(is_active=True).select_related('stage').order_by('sort_order'):
+            entry_qs = ProductionEntry.objects.filter(
+                variant__product_model=m,
+                stage=ms.stage,
+                is_cancelled=False
+            )
+            if start_date:
+                entry_qs = entry_qs.filter(production_date__gte=start_date)
+            if end_date:
+                entry_qs = entry_qs.filter(production_date__lte=end_date)
+
+            prod = entry_qs.aggregate(t=Sum('quantity'))['t'] or 0
+            val = entry_qs.aggregate(t=Sum('total_amount'))['t'] or 0
+            pct = min(100, int((prod / planned * 100))) if planned > 0 else 0
+            stages_data.append({
+                'stage': ms.stage,
+                'name': ms.stage.name,
+                'produced': prod,
+                'total_value': val,
+                'unit_price': ms.unit_price,
+                'pct': pct,
+            })
+
+        result.append({
+            'model': m,
+            'planned': planned,
+            'stages': stages_data,
+        })
+    return result
+
